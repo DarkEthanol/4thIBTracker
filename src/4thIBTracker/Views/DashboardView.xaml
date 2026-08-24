@@ -1,0 +1,334 @@
+<UserControl x:Class="FourthIBTracker.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
+    <UserControl.Resources>
+        <DataTemplate x:Key="TransferRow">
+            <Border BorderBrush="#22FFFFFF" BorderThickness="0,0,0,1" Padding="0,4">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="↗" Width="26" Height="24"
+                            Margin="6,0,0,0" ToolTip="Open thread" VerticalAlignment="Center"
+                            Command="{Binding DataContext.OpenTransferCommand,
+                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"/>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Title}" FontSize="13.5"
+                                   Foreground="{StaticResource TextMain}" TextWrapping="Wrap"/>
+                        <TextBlock FontSize="11.5" Foreground="{StaticResource TextDim}">
+                            <Run Text="{Binding Tag, Mode=OneWay}"/>
+                            <Run Text=" · "/>
+                            <Run Text="{Binding Date, Mode=OneWay, StringFormat='dd MMM yyyy',
+                                        TargetNullValue='date unknown'}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Margin="20,12,8,4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Hidden fetcher for the transfers scan: reuses the app's forum login -->
+        <wv2:WebView2 x:Name="Fetcher" Grid.Row="0" Width="0" Height="0" Visibility="Hidden"/>
+
+        <DockPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource H1}" Text="Dashboard" Margin="0,0,0,6"/>
+            <Button DockPanel.Dock="Right" Content="↻ Refresh" HorizontalAlignment="Right"
+                    VerticalAlignment="Top" Padding="10,4" Command="{Binding LoadCommand}"/>
+        </DockPanel>
+
+        <StackPanel Grid.Row="1">
+            <TextBlock Text="{Binding Error}" Foreground="{StaticResource Danger}"
+                       TextWrapping="Wrap" Margin="0,0,0,4" FontSize="12.5">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Error}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <ProgressBar IsIndeterminate="True" Height="3" Margin="0,0,0,6">
+                <ProgressBar.Style>
+                    <Style TargetType="ProgressBar">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsLoading}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ProgressBar.Style>
+            </ProgressBar>
+        </StackPanel>
+
+        <!-- Fixed single-screen grid: long lists scroll inside their own cards -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*"/>
+                <ColumnDefinition Width="1.15*"/>
+                <ColumnDefinition Width="1*"/>
+                <ColumnDefinition Width="1*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Column 1: alerts -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="1.1*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="1.2*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="DISCIPLINARIES"/>
+                        <TextBlock DockPanel.Dock="Top" Text="None — clean slate."
+                                   Foreground="{StaticResource TextDim}" FontSize="13.5">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ActiveDisciplinaries.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding ActiveDisciplinaries}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="#33FFFFFF" BorderThickness="0,0,0,1" Padding="0,5">
+                                            <StackPanel>
+                                                <DockPanel>
+                                                    <TextBlock Text="{Binding Recipient}" FontWeight="SemiBold"
+                                                               FontSize="13.5" Foreground="{StaticResource TextMain}"/>
+                                                    <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right"
+                                                               FontSize="12.5" Foreground="{StaticResource Warn}">
+                                                        <Run Text="{Binding DaysRemaining, Mode=OneWay}"/><Run Text="d left"/>
+                                                    </TextBlock>
+                                                </DockPanel>
+                                                <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap">
+                                                    <Run Text="{Binding Offence, Mode=OneWay}"/><Run Text=" · "/>
+                                                    <Run Text="{Binding Area, Mode=OneWay}"/><Run Text=" · "/>
+                                                    <Run Text="{Binding Notes, Mode=OneWay}"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Row="1" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource H2}" Text="{Binding NcoMonthTitle}"/>
+                        <ItemsControl ItemsSource="{Binding NcoChecks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,2">
+                                        <TextBlock DockPanel.Dock="Right" FontWeight="Bold" FontSize="13">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="✗ Outstanding"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Danger}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Done}" Value="True">
+                                                            <Setter Property="Text" Value="✓ Done"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Position}" FontWeight="SemiBold" FontSize="13.5"
+                                                   Foreground="{StaticResource TextMain}"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="ORBAT SYNC"/>
+                        <TextBlock DockPanel.Dock="Top" Text="✓ Matches the website ORBAT."
+                                   Foreground="{StaticResource Accent}" FontWeight="SemiBold" FontSize="13.5">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding OrbatInSync}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding OrbatMismatches}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="#33FFFFFF" BorderThickness="0,0,0,1" Padding="0,4">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13.5"
+                                                           Foreground="{StaticResource Warn}"/>
+                                                <TextBlock Text="{Binding Detail}" FontSize="12"
+                                                           Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- Column 2: logi order -->
+            <Border Grid.Column="1" Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="LOGI ORDER"/>
+                    <TextBlock DockPanel.Dock="Top" Text="Nothing ordered."
+                               Foreground="{StaticResource TextDim}" FontSize="13.5">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding LogiOrder.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding LogiOrder}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,2">
+                                        <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource Accent}"
+                                                   FontWeight="Bold" FontSize="13" Margin="6,0,0,0"
+                                                   VerticalAlignment="Center">
+                                            <Run Text="×"/><Run Text="{Binding Total, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Item}" FontSize="13"
+                                                       Foreground="{StaticResource TextMain}"
+                                                       TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Breakdown}" FontSize="11.5"
+                                                       Foreground="{StaticResource TextDim}"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Column 3: roster -->
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="PLATOON ORBAT"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Sections}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,8">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13.5"
+                                                   Foreground="{StaticResource Accent}" Margin="0,0,0,2"/>
+                                        <ItemsControl ItemsSource="{Binding Soldiers}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding}" FontSize="12.5"
+                                                               Foreground="{StaticResource TextMain}"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Column 4: readiness + logi -->
+            <Grid Grid.Column="3">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="1.15*"/>
+                    <RowDefinition Height="1*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="OUTSTANDING COURSES"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding CourseGaps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel Margin="0,2">
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Outstanding}"
+                                                       Foreground="{StaticResource Warn}" FontWeight="Bold"
+                                                       FontSize="13" Margin="8,0,0,0"/>
+                                            <TextBlock Text="{Binding Course}" FontSize="13"
+                                                       Foreground="{StaticResource TextMain}"/>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Row="1" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top">
+                            <TextBlock Style="{StaticResource H2}" Text="TRANSFERS"/>
+                            <Button DockPanel.Dock="Right" Content="Scan" Padding="12,2"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Command="{Binding ScanTransfersCommand}"/>
+                        </DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding TransferStatus}" FontSize="12"
+                                   Foreground="{StaticResource TextDim}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="3" Margin="0,0,0,4">
+                            <ProgressBar.Style>
+                                <Style TargetType="ProgressBar">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsScanningTransfers}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ProgressBar.Style>
+                        </ProgressBar>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="PENDING" FontSize="11.5" FontWeight="Bold"
+                                           Foreground="{StaticResource Warn}" Margin="0,2,0,2"/>
+                                <ItemsControl ItemsSource="{Binding PendingTransfers}"
+                                              ItemTemplate="{StaticResource TransferRow}"/>
+                                <TextBlock Text="COMPLETED" FontSize="11.5" FontWeight="Bold"
+                                           Foreground="{StaticResource Accent}" Margin="0,10,0,2"/>
+                                <ItemsControl ItemsSource="{Binding CompletedTransfers}"
+                                              ItemTemplate="{StaticResource TransferRow}"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

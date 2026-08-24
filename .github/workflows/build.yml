@@ -1,0 +1,31 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore 4thIBTracker.sln
+
+      - name: Build
+        run: dotnet build 4thIBTracker.sln --configuration Release --no-restore
+
+      - name: Test updater
+        run: dotnet run --project tests/4thIBTracker.UpdaterTests --configuration Release --no-build

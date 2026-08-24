@@ -1,0 +1,31 @@
+# Build products and local tooling
+**/bin/
+**/obj/
+.vs/
+.codex-build/
+publish*/
+artifacts/
+dist/
+TestResults/
+*.user
+*.suo
+*.pdb
+
+# Credentials and private local configuration
+credentials*.json
+Google.Apis.Auth.OAuth2.Responses.TokenResponse-*
+.private/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.snk
+
+# Unit-only generated material and tooling
+exports/
+tools/
+*.pbo
+*.zip

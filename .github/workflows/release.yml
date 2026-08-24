@@ -1,0 +1,50 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Validate tag and build release
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+)$') {
+            throw "Release tags must use vMAJOR.MINOR.PATCH. Received: $tag"
+          }
+          ./scripts/Publish-Release.ps1 `
+            -Version $Matches.version `
+            -Repository $env:GITHUB_REPOSITORY
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assetDirectory = "artifacts/release/$tag"
+          gh release create $tag `
+            "$assetDirectory/4thIBTracker.exe#4thIB Tracker for Windows x64" `
+            "$assetDirectory/4thIBTracker.exe.sha256#SHA-256 checksum" `
+            --verify-tag `
+            --generate-notes `
+            --latest

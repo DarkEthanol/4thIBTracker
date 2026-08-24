@@ -1,0 +1,67 @@
+<UserControl x:Class="FourthIBTracker.Views.AddressView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel Margin="20">
+        <DockPanel DockPanel.Dock="Top">
+            <TextBlock Style="{StaticResource H1}" Text="Sergeant's Address"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                        HorizontalAlignment="Right" VerticalAlignment="Top">
+                <Button Content="📋 Copy for Discord" Padding="14,5" FontWeight="SemiBold"
+                        Command="{Binding CopyCommand}" Margin="0,0,8,0"/>
+                <Button Content="↻ Refresh stats" Padding="10,5" Command="{Binding LoadCommand}"/>
+            </StackPanel>
+        </DockPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}"
+                   Foreground="{StaticResource Accent}" Margin="0,0,0,4"/>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Error}" TextWrapping="Wrap"
+                   Foreground="{StaticResource Danger}" Margin="0,0,0,4"/>
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="3" Margin="0,0,0,8">
+            <ProgressBar.Style>
+                <Style TargetType="ProgressBar">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsLoading}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ProgressBar.Style>
+        </ProgressBar>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Generated post -->
+            <Border Grid.Column="0" Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="POST (EDITABLE)"/>
+                    <TextBox Text="{Binding GeneratedText, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             FontSize="15" Padding="8"
+                             Background="#1A1D20" Foreground="{StaticResource TextMain}"
+                             BorderThickness="0"/>
+                </DockPanel>
+            </Border>
+
+            <!-- Notes -->
+            <Border Grid.Column="1" Style="{StaticResource Card}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="ADDITIONAL NOTES"/>
+                    <TextBlock DockPanel.Dock="Top" FontSize="13" Foreground="{StaticResource TextDim}"
+                               TextWrapping="Wrap" Margin="0,0,0,6"
+                               Text="Anything typed here is inserted before the sign-off when the post regenerates (world cup banter goes here)."/>
+                    <TextBox Text="{Binding ExtraNotes, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             FontSize="15" Padding="8"
+                             Background="#1A1D20" Foreground="{StaticResource TextMain}"
+                             BorderThickness="0"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </DockPanel>
+</UserControl>
