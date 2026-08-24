@@ -38,7 +38,7 @@
                         <TextBlock FontSize="13" Foreground="{StaticResource TextDim}"
                                    TextWrapping="Wrap" Margin="0,0,0,8">
                             <Run Text="Installed version: "/>
-                            <Run Text="{Binding Updates.CurrentVersion}" FontWeight="Bold"/>
+                            <Run Text="{Binding Updates.CurrentVersion, Mode=OneWay}" FontWeight="Bold"/>
                         </TextBlock>
                         <TextBlock Text="{Binding Updates.StatusMessage}" FontSize="13"
                                    Foreground="{StaticResource TextDim}" TextWrapping="Wrap"
