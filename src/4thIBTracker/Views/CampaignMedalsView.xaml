@@ -88,7 +88,7 @@
                                                         <TextBlock Grid.Column="1" FontSize="12.5"
                                                                    Foreground="{StaticResource TextDim}"
                                                                    VerticalAlignment="Center">
-                                                            <Run Text="{Binding Deployments}"/><Run Text=" deployments"/>
+                                                            <Run Text="{Binding Deployments, Mode=OneWay}"/><Run Text=" deployments"/>
                                                         </TextBlock>
                                                         <StackPanel Grid.Column="2">
                                                             <Border Background="#4A3A2A" CornerRadius="8"
