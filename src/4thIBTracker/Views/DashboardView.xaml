@@ -282,7 +282,7 @@
                                         <DockPanel Margin="0,2">
                                             <TextBlock DockPanel.Dock="Right" Text="{Binding Outstanding}"
                                                        Foreground="{StaticResource Warn}" FontWeight="Bold"
-                                                       FontSize="13" Margin="8,0,0,0"/>
+                                                       FontSize="13" Margin="8,0,10,0"/>
                                             <TextBlock Text="{Binding Course}" FontSize="13"
                                                        Foreground="{StaticResource TextMain}"/>
                                         </DockPanel>
