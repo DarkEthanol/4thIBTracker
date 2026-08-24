@@ -129,7 +129,7 @@
                                         </Style>
                                     </Border.Style>
                                     <TextBlock Foreground="White" FontWeight="Bold">
-                                        <Run Text="{Binding OverdueCount}"/><Run Text=" overdue"/>
+                                        <Run Text="{Binding OverdueCount, Mode=OneWay}"/><Run Text=" overdue"/>
                                     </TextBlock>
                                 </Border>
                             </DockPanel>
