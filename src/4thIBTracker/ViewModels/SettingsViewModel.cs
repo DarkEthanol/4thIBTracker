@@ -37,6 +37,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string addressFrom = "";
     [ObservableProperty] private string signOff = "";
     [ObservableProperty] private string ncoPositions = "";
+    [ObservableProperty] private string outstandingCourseExclusions = "";
     [ObservableProperty] private string signOffPhrase = "";
 
     // URLs / IDs
@@ -77,6 +78,8 @@ public partial class SettingsViewModel : ObservableObject
         addressFrom = config.Platoon.AddressFrom;
         signOff = config.Platoon.SignOff;
         ncoPositions = string.Join(", ", config.Platoon.NcoTrackerPositions);
+        outstandingCourseExclusions = string.Join(", ",
+            config.Platoon.OutstandingCourseExclusions);
         signOffPhrase = config.Platoon.SignOffPhrase;
 
         orbatUrl = config.OrbatUrl;
@@ -172,6 +175,8 @@ public partial class SettingsViewModel : ObservableObject
             _config.Platoon.AddressFrom = AddressFrom.Trim();
             _config.Platoon.SignOff = SignOff.Trim();
             _config.Platoon.NcoTrackerPositions = SplitList(NcoPositions, ',');
+            _config.Platoon.OutstandingCourseExclusions =
+                SplitList(OutstandingCourseExclusions, ',');
             _config.Platoon.SignOffPhrase = SignOffPhrase.Trim();
 
             _config.OrbatUrl = OrbatUrl.Trim();

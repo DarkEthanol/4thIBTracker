@@ -106,6 +106,16 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Outstanding course exclusions"/>
+                            <TextBox Grid.Column="1" Text="{Binding OutstandingCourseExclusions}"
+                                     Width="380" HorizontalAlignment="Left"
+                                     ToolTip="Comma-separated course names to hide from the dashboard's Outstanding Courses list"/>
+                        </Grid>
+                        <Grid Style="{StaticResource RowGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="230"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <TextBlock Style="{StaticResource RowLabel}" Text="Report sign-off phrase"/>
                             <TextBox Grid.Column="1" Text="{Binding SignOffPhrase}" Width="380" HorizontalAlignment="Left"
                                      ToolTip="The exact phrase you type when signing off a patrol report"/>

@@ -30,6 +30,17 @@ var canonicallyEquivalent = OrbatWebService.Compare(
 Check(canonicallyEquivalent.Count == 0,
     "canonical Unicode ORBAT comparison");
 
+var platoonSettings = new AppConfig.PlatoonSection
+{
+    OutstandingCourseExclusions = [" SERE ", "Advanced   MG"],
+};
+Check(platoonSettings.ExcludesOutstandingCourse("sere"),
+    "case-insensitive outstanding-course exclusion");
+Check(platoonSettings.ExcludesOutstandingCourse("Advanced MG"),
+    "whitespace-tolerant outstanding-course exclusion");
+Check(!platoonSettings.ExcludesOutstandingCourse("SERE Advanced"),
+    "outstanding-course exclusion requires an exact name");
+
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
     "checksum parsing");
@@ -122,7 +133,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (14 checks).");
+Console.WriteLine("Automated tests passed (17 checks).");
 return 0;
 
 void Check(bool condition, string name)

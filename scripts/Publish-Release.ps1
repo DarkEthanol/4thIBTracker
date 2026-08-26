@@ -60,6 +60,9 @@ foreach ($name in @('AddressFrom', 'SignOff', 'SignOffPhrase')) {
 if (@($settings.Platoon.NcoTrackerPositions).Count -gt 0) {
     $privateValues.Add('Platoon.NcoTrackerPositions')
 }
+if (@($settings.Platoon.OutstandingCourseExclusions).Count -gt 0) {
+    $privateValues.Add('Platoon.OutstandingCourseExclusions')
+}
 foreach ($property in $settings.Forum.PSObject.Properties) {
     if ($property.Value -is [string] -and
         -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {

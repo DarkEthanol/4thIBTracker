@@ -73,6 +73,8 @@ public partial class DashboardViewModel : ObservableObject
                 CourseGaps.Clear();
                 foreach (var course in courseNames)
                 {
+                    if (_config.Platoon.ExcludesOutstandingCourse(course)) continue;
+
                     int outstanding = records.Count(r =>
                         !r.Courses.TryGetValue(course, out var v) ||
                         (!v.Equals("Complete", StringComparison.OrdinalIgnoreCase) &&

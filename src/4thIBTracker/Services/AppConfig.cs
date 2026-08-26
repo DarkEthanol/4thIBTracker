@@ -41,8 +41,22 @@ public class AppConfig
         public string AddressFrom { get; set; } = "";
         public string SignOff { get; set; } = "";
         public List<string> NcoTrackerPositions { get; set; } = new();
+        public List<string> OutstandingCourseExclusions { get; set; } = new();
         /// <summary>The phrase typed when signing off a patrol report.</summary>
         public string SignOffPhrase { get; set; } = "";
+
+        public bool ExcludesOutstandingCourse(string course)
+        {
+            var normalizedCourse = NormalizeCourseName(course);
+            return OutstandingCourseExclusions.Any(excluded => string.Equals(
+                NormalizeCourseName(excluded), normalizedCourse,
+                StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string NormalizeCourseName(string value) =>
+            string.Join(" ", value.Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
         [System.Text.Json.Serialization.JsonIgnore]
         public string Name => $"{Number} Platoon";
