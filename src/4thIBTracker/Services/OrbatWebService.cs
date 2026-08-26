@@ -1,4 +1,6 @@
+using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace FourthIBTracker.Services;
@@ -17,21 +19,27 @@ public static class OrbatWebService
     private static readonly Regex UserLinkRx = new(
         @"<a[^>]*href=""[^""]*user-\d+\.html""[^>]*>(?<name>[^<]+)</a>", RegexOptions.IgnoreCase);
     private static readonly Regex TagRx = new(@"<[^>]+>");
-    private static readonly Regex NameRx = new(@"([A-Z]\.\s*[A-Za-z'\-]+)\s*$");
+    private static readonly Regex NameRx = new(
+        @"([\p{L}]\.\s*[\p{L}\p{M}'’\-]+(?:\s+[\p{L}\p{M}'’\-]+)*)\s*$");
 
     /// <summary>Section name → rank-stripped members, for HQ / 1 Section / 2 Section / 3 Section.</summary>
     public static async Task<Dictionary<string, List<string>>> FetchPlatoonAsync(string orbatUrl, int platoon)
     {
+        var html = await Http.GetStringAsync(orbatUrl);
+        return ParsePlatoonHtml(html, platoon);
+    }
+
+    internal static Dictionary<string, List<string>> ParsePlatoonHtml(string html, int platoon)
+    {
         // Matches ordinary and qualified headings such as "3 (Fire Support) Platoon".
         var platoonHeadingRx = new Regex($@"^{platoon}\b.*Platoon$", RegexOptions.IgnoreCase);
-        var html = await Http.GetStringAsync(orbatUrl);
 
         // Interleave headings and member links in document order.
         var events = new List<(int Pos, bool IsHeading, string Text)>();
         foreach (Match m in HeadingRx.Matches(html))
-            events.Add((m.Index, true, TagRx.Replace(m.Groups["text"].Value, "").Trim()));
+            events.Add((m.Index, true, DecodeText(m.Groups["text"].Value)));
         foreach (Match m in UserLinkRx.Matches(html))
-            events.Add((m.Index, false, m.Groups["name"].Value.Trim()));
+            events.Add((m.Index, false, DecodeText(m.Groups["name"].Value)));
         events.Sort((a, b) => a.Pos.CompareTo(b.Pos));
 
         var sections = new Dictionary<string, List<string>>
@@ -57,6 +65,9 @@ public static class OrbatWebService
             if (m.Success) sections[current].Add(m.Groups[1].Value);
         }
         return sections;
+
+        static string DecodeText(string value) =>
+            WebUtility.HtmlDecode(TagRx.Replace(value, "")).Trim();
     }
 
     public record OrbatMismatch(string Name, string Detail);
@@ -74,7 +85,9 @@ public static class OrbatWebService
              .GroupBy(x => x.Name)
              .ToDictionary(g => g.Key, g => g.First().Section);
 
-        static string Norm(string n) => Regex.Replace(n, @"\s+", " ").Trim().ToLowerInvariant();
+        static string Norm(string n) => Regex.Replace(
+                n.Normalize(NormalizationForm.FormC), @"\s+", " ")
+            .Trim().ToLowerInvariant();
 
         var webFlat = Flatten(web);
         var sheetFlat = Flatten(sheet);

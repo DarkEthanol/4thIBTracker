@@ -12,6 +12,24 @@ Check(!UpdateService.TryParseReleaseVersion("v1.2.3-beta", out _),
 Check(!UpdateService.TryParseReleaseVersion("release-1.2.3", out _),
     "invalid tag rejection");
 
+var unicodeOrbat = OrbatWebService.ParsePlatoonHtml("""
+    <h3>1 Platoon</h3>
+    <h4>1 Section</h4>
+    <a href="user-3891.html">Pte. V. Bjørn</a>
+    <a href="user-4000.html">Pte. J. D&apos;Arcy</a>
+    <h3>2 Platoon</h3>
+    """, 1);
+Check(unicodeOrbat["1 Section"].Contains("V. Bjørn"),
+    "Unicode ORBAT surname parsing");
+Check(unicodeOrbat["1 Section"].Contains("J. D'Arcy"),
+    "ORBAT HTML entity decoding");
+
+var canonicallyEquivalent = OrbatWebService.Compare(
+    new() { ["HQ"] = ["V. Éclair"] },
+    new() { ["HQ"] = ["V. E\u0301clair"] });
+Check(canonicallyEquivalent.Count == 0,
+    "canonical Unicode ORBAT comparison");
+
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
     "checksum parsing");
@@ -104,7 +122,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Updater tests passed (11 checks).");
+Console.WriteLine("Automated tests passed (14 checks).");
 return 0;
 
 void Check(bool condition, string name)
