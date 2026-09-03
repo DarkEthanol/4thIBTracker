@@ -59,40 +59,85 @@
                 </ItemsControl>
             </StackPanel>
 
-            <DataGrid x:Name="AttendanceGrid"
-                      ItemsSource="{Binding SelectedMonth.Events}"
-                      AutoGenerateColumns="False" IsReadOnly="True"
-                      HeadersVisibility="Column" GridLinesVisibility="All"
-                      HorizontalGridLinesBrush="#20FFFFFF"
-                      VerticalGridLinesBrush="#30FFFFFF"
-                      Background="Transparent"
-                      RowBackground="{StaticResource BgPanel}"
-                      AlternatingRowBackground="#2B2F33"
-                      Foreground="{StaticResource TextMain}"
-                      BorderThickness="0"
-                      RowHeight="42" FontSize="14"
-                      ColumnHeaderHeight="68"
-                      FrozenColumnCount="2"
-                      CanUserResizeRows="False" CanUserReorderColumns="False"
-                      CanUserAddRows="False" CanUserDeleteRows="False"
-                      SelectionMode="Single" SelectionUnit="FullRow"
-                      EnableColumnVirtualization="False" EnableRowVirtualization="True"
-                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                <DataGrid.CellStyle>
-                    <Style TargetType="DataGridCell">
-                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
-                        <Setter Property="BorderBrush" Value="#20FFFFFF"/>
-                        <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                    </Style>
-                </DataGrid.CellStyle>
-                <DataGrid.RowStyle>
-                    <Style TargetType="DataGridRow">
-                        <Setter Property="BorderThickness" Value="0"/>
-                        <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
-                    </Style>
-                </DataGrid.RowStyle>
-            </DataGrid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding SelectedMonth.Sections}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Card}" Width="{Binding CardWidth}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource H2}"/>
+
+                                    <!-- Operation-night headers align with the status cells below. -->
+                                    <Grid Margin="0,0,0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="180"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Name" FontSize="12.5" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextDim}"
+                                                   VerticalAlignment="Bottom"/>
+                                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Nights}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding DateLabel}" Width="58"
+                                                               Margin="0,0,4,0" FontSize="12.5"
+                                                               FontWeight="SemiBold" TextAlignment="Center"
+                                                               Foreground="{StaticResource TextDim}"
+                                                               ToolTip="{Binding ToolTip}"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Grid>
+
+                                    <ItemsControl ItemsSource="{Binding Rows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="180"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Name}" FontSize="14"
+                                                               Foreground="{StaticResource TextMain}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding Name}"/>
+                                                    <ItemsControl Grid.Column="1" ItemsSource="{Binding Cells}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Width="58" Height="30" Margin="0,0,4,0"
+                                                                        CornerRadius="4"
+                                                                        Background="{Binding Background}"
+                                                                        BorderBrush="#44000000" BorderThickness="1"
+                                                                        ToolTip="{Binding Label}">
+                                                                    <TextBlock Text="{Binding ShortLabel}"
+                                                                               FontSize="12.5" FontWeight="SemiBold"
+                                                                               Foreground="{Binding Foreground}"
+                                                                               HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center"/>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
         </DockPanel>
     </Grid>
 </UserControl>

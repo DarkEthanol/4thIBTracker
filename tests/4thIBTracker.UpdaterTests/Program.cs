@@ -101,6 +101,13 @@ Check(attendanceMonths[0].Events[0].Marks.Select(mark => mark.Status).SequenceEq
     "section attendance merged into platoon-wide event rows");
 Check(attendanceMonths[1].Events[0].Marks[^1].Status == WebsiteAttendanceStatus.Unknown,
     "missing section attendance remains a neutral no-record state");
+Check(attendanceMonths[0].ToString() == "September 2026",
+    "attendance month selector display label");
+Check(attendanceMonths[0].Sections.Select(section => section.Name)
+        .SequenceEqual(["1 Section", "2 Section"]) &&
+      attendanceMonths[0].Sections[0].Rows[0].Name == "Pte. V. Bjørn" &&
+      attendanceMonths[0].Sections[1].Rows[0].Cells[0].Status == WebsiteAttendanceStatus.Late,
+    "monthly attendance retains section and soldier-row layout");
 
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
@@ -194,7 +201,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (26 checks).");
+Console.WriteLine("Automated tests passed (28 checks).");
 return 0;
 
 void Check(bool condition, string name)

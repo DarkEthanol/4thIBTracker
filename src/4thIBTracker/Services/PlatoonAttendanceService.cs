@@ -73,11 +73,32 @@ public record WebsiteAttendanceSection(
 public record WebsiteAttendanceMonth(
     DateTime Month,
     IReadOnlyList<string> Members,
-    IReadOnlyList<WebsiteAttendanceEvent> Events)
+    IReadOnlyList<WebsiteAttendanceEvent> Events,
+    IReadOnlyList<WebsiteAttendanceNight> Nights,
+    IReadOnlyList<WebsiteAttendanceMonthSection> Sections)
 {
     public string Label => Month.ToString("MMMM yyyy");
     public string Summary => $"{Members.Count} member{(Members.Count == 1 ? "" : "s")} · " +
                              $"{Events.Count} event{(Events.Count == 1 ? "" : "s")}";
+    public override string ToString() => Label;
+}
+
+public record WebsiteAttendanceNight(DateTime Date, string Name)
+{
+    public string DateLabel => Date.ToString("dd MMM");
+    public string ToolTip => $"{Date:dddd, dd MMMM yyyy} — {Name}";
+}
+
+public record WebsiteAttendanceSoldierRow(
+    string Name,
+    IReadOnlyList<WebsiteAttendanceMark> Cells);
+
+public record WebsiteAttendanceMonthSection(
+    string Name,
+    IReadOnlyList<WebsiteAttendanceNight> Nights,
+    IReadOnlyList<WebsiteAttendanceSoldierRow> Rows)
+{
+    public double CardWidth => Math.Max(430, 220 + Nights.Count * 62);
 }
 
 /// <summary>
@@ -282,10 +303,47 @@ public static partial class PlatoonAttendanceService
         return combinedEvents
             .GroupBy(record => new DateTime(record.Date.Year, record.Date.Month, 1))
             .OrderByDescending(group => group.Key)
-            .Select(group => new WebsiteAttendanceMonth(
-                group.Key,
-                members,
-                group.OrderByDescending(record => record.Date).ToList()))
+            .Select(group =>
+            {
+                var monthEvents = group.OrderBy(record => record.Date).ToList();
+                var nights = monthEvents
+                    .Select(record => new WebsiteAttendanceNight(record.Date, record.Name))
+                    .ToList();
+                var monthSections = new List<WebsiteAttendanceMonthSection>();
+                foreach (var section in sections)
+                {
+                    var sectionEvents = section.Events
+                        .Where(record => record.Date.Year == group.Key.Year &&
+                                         record.Date.Month == group.Key.Month)
+                        .ToDictionary(record => record.Date.Date);
+                    var rows = new List<WebsiteAttendanceSoldierRow>();
+                    foreach (var member in section.Members)
+                    {
+                        var cells = new List<WebsiteAttendanceMark>();
+                        foreach (var night in nights)
+                        {
+                            var status = WebsiteAttendanceStatus.Unknown;
+                            if (sectionEvents.TryGetValue(night.Date.Date, out var sectionEvent))
+                            {
+                                status = sectionEvent.Marks.FirstOrDefault(mark =>
+                                    mark.Member.Equals(member, StringComparison.OrdinalIgnoreCase))?.Status ??
+                                    WebsiteAttendanceStatus.Unknown;
+                            }
+                            cells.Add(new WebsiteAttendanceMark(member, status));
+                        }
+                        rows.Add(new WebsiteAttendanceSoldierRow(member, cells));
+                    }
+                    monthSections.Add(new WebsiteAttendanceMonthSection(
+                        section.Name, nights, rows));
+                }
+
+                return new WebsiteAttendanceMonth(
+                    group.Key,
+                    members,
+                    monthEvents.OrderByDescending(record => record.Date).ToList(),
+                    nights,
+                    monthSections);
+            })
             .ToList();
     }
 
