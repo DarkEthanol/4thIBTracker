@@ -41,6 +41,50 @@ Check(platoonSettings.ExcludesOutstandingCourse("Advanced MG"),
 Check(!platoonSettings.ExcludesOutstandingCourse("SERE Advanced"),
     "outstanding-course exclusion requires an exact name");
 
+var attendanceIndex = """
+    <a href="attendance.php?section=900">Battalion / 1 Platoon</a>
+    <a href='attendance.php?section=901'>Battalion / 1 Platoon / 1 Section</a>
+    <a href="attendance.php?section=902">Battalion / 1 Platoon / 2 Section</a>
+    <a href="attendance.php?section=990">Battalion / 11 Platoon / 1 Section</a>
+    """;
+var attendanceLinks = PlatoonAttendanceService.FindPlatoonSections(
+    attendanceIndex, "https://unit.invalid/attendance.php", 1);
+Check(attendanceLinks.Select(link => link.Name).SequenceEqual(["HQ", "1 Section", "2 Section"]),
+    "dynamic platoon attendance section discovery");
+Check(attendanceLinks[1].Url == "https://unit.invalid/attendance.php?section=901",
+    "relative attendance section URL resolution");
+
+var attendanceGrid = """
+    <table class="personal-card">
+      <tr><th>Date</th><th>Event</th><th>State</th></tr>
+      <tr><td>01-09-2026</td><td>PDT</td><td style="background:#6AA84F"></td></tr>
+    </table>
+    <table><tr><td class="wrapper">
+      <table class="attendance-grid">
+        <tr><th>Date</th><th>Event</th><th><a>Pte. V. Bj&oslash;rn</a></th><th>Cpl. J. Smith</th><th></th></tr>
+        <tr><td>02-09-2026</td><td>PDT</td>
+          <td style="background: #6AA84F"></td>
+          <td style="background-color: rgb(60, 120, 216)"></td><td>edit</td></tr>
+        <tr><td>26-08-2026</td><td>Operation TEST</td>
+          <td style="background:#FFFF00"></td>
+          <td style="background:#FF0000"></td><td>edit</td></tr>
+      </table>
+    </td></tr></table>
+    """;
+var parsedAttendance = PlatoonAttendanceService.ParseSection(
+    attendanceGrid, attendanceLinks[1]);
+Check(parsedAttendance.Members.SequenceEqual(["Pte. V. Bjørn", "Cpl. J. Smith"]),
+    "attendance member and HTML entity parsing");
+Check(parsedAttendance.Events.Count == 2 &&
+      parsedAttendance.Events[0].Date == new DateTime(2026, 9, 2),
+    "attendance record parsing and newest-first ordering");
+Check(parsedAttendance.Events[0].Marks.Select(mark => mark.Status).SequenceEqual(
+        [WebsiteAttendanceStatus.Present, WebsiteAttendanceStatus.Excused]),
+    "attendance colour status parsing");
+Check(parsedAttendance.Events[1].Marks.Select(mark => mark.Status).SequenceEqual(
+        [WebsiteAttendanceStatus.Late, WebsiteAttendanceStatus.Absent]),
+    "additional attendance colour status parsing");
+
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
     "checksum parsing");
@@ -133,7 +177,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (17 checks).");
+Console.WriteLine("Automated tests passed (23 checks).");
 return 0;
 
 void Check(bool condition, string name)
