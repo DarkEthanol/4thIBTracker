@@ -41,11 +41,13 @@ public static class AttendanceStatusExtensions
     // Colours mirror the sheet's conditional-formatting rules (for in-app display only).
     private static readonly Dictionary<AttendanceStatus, string> Hex = new()
     {
-        [AttendanceStatus.None]    = "#FFFFFF",
-        [AttendanceStatus.Present] = "#D9EAD3",
-        [AttendanceStatus.Loa]     = "#C9DAF8",
-        [AttendanceStatus.Late]    = "#FFF2CC",
-        [AttendanceStatus.Awol]    = "#EA9999",
+        // Use the same palette as the website attendance history so the two
+        // halves of the combined page read as one tracker.
+        [AttendanceStatus.None]    = "#555B60",
+        [AttendanceStatus.Present] = "#6AA84F",
+        [AttendanceStatus.Loa]     = "#3C78D8",
+        [AttendanceStatus.Late]    = "#FFFF00",
+        [AttendanceStatus.Awol]    = "#FF0000",
     };
 
     public static Color ToColor(this AttendanceStatus s) =>

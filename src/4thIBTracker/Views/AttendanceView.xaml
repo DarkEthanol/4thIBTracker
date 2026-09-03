@@ -180,7 +180,7 @@
                                                                 </Border.InputBindings>
                                                                 <TextBlock Text="{Binding Status, Converter={StaticResource StatusShort}}"
                                                                            FontSize="13" FontWeight="SemiBold"
-                                                                           Foreground="#222"
+                                                                           Foreground="{Binding Foreground}"
                                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                             </Border>
                                                         </DataTemplate>

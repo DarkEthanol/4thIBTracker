@@ -21,6 +21,8 @@ public record WebsiteAttendanceMark(string Member, WebsiteAttendanceStatus Statu
 {
     public string Label => Status switch
     {
+        WebsiteAttendanceStatus.Absent => "AWOL",
+        WebsiteAttendanceStatus.Excused => "LOA",
         WebsiteAttendanceStatus.NotRequired => "Not Required",
         WebsiteAttendanceStatus.Unknown => "No record",
         _ => Status.ToString(),
@@ -43,12 +45,12 @@ public record WebsiteAttendanceMark(string Member, WebsiteAttendanceStatus Statu
     public string ShortLabel => Status switch
     {
         WebsiteAttendanceStatus.Present => "P",
-        WebsiteAttendanceStatus.Late => "L",
-        WebsiteAttendanceStatus.Absent => "A",
-        WebsiteAttendanceStatus.Excused => "E",
+        WebsiteAttendanceStatus.Late => "Late",
+        WebsiteAttendanceStatus.Absent => "AWOL",
+        WebsiteAttendanceStatus.Excused => "LOA",
         WebsiteAttendanceStatus.Reserves => "R",
         WebsiteAttendanceStatus.NotRequired => "N/R",
-        _ => "—",
+        _ => "",
     };
 }
 

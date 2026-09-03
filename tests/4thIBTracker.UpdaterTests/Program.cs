@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using FourthIBTracker.Models;
 using FourthIBTracker.Services;
 
 var failures = new List<string>();
@@ -108,6 +109,14 @@ Check(attendanceMonths[0].Sections.Select(section => section.Name)
       attendanceMonths[0].Sections[0].Rows[0].Name == "Pte. V. Bjørn" &&
       attendanceMonths[0].Sections[1].Rows[0].Cells[0].Status == WebsiteAttendanceStatus.Late,
     "monthly attendance retains section and soldier-row layout");
+Check(new WebsiteAttendanceMark("Test", WebsiteAttendanceStatus.Excused).ShortLabel == "LOA" &&
+      new WebsiteAttendanceMark("Test", WebsiteAttendanceStatus.Absent).ShortLabel == "AWOL" &&
+      new WebsiteAttendanceMark("Test", WebsiteAttendanceStatus.Late).ShortLabel == "Late",
+    "website attendance uses sheet attendance acronyms");
+Check(AttendanceStatus.Present.ToColor().ToString() == "#FF6AA84F" &&
+      AttendanceStatus.Loa.ToColor().ToString() == "#FF3C78D8" &&
+      AttendanceStatus.Awol.ToColor().ToString() == "#FFFF0000",
+    "editable attendance uses website attendance colours");
 
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
@@ -201,7 +210,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (28 checks).");
+Console.WriteLine("Automated tests passed (30 checks).");
 return 0;
 
 void Check(bool condition, string name)

@@ -312,11 +312,15 @@ public partial class AttendanceCellViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Brush))]
+    [NotifyPropertyChangedFor(nameof(Foreground))]
     private AttendanceStatus status;
 
     public bool IsDirty { get; set; }
 
     public Brush Brush => new SolidColorBrush(Status.ToColor());
+    public Brush Foreground => Status == AttendanceStatus.Late
+        ? new SolidColorBrush(Color.FromRgb(0x16, 0x18, 0x1A))
+        : Brushes.White;
 
     public AttendanceCellViewModel(
         int sheetRow, int col0, AttendanceStatus initial,
