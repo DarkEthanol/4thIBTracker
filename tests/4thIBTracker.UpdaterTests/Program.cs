@@ -85,6 +85,23 @@ Check(parsedAttendance.Events[1].Marks.Select(mark => mark.Status).SequenceEqual
         [WebsiteAttendanceStatus.Late, WebsiteAttendanceStatus.Absent]),
     "additional attendance colour status parsing");
 
+var secondAttendanceSection = new WebsiteAttendanceSection(
+    "2 Section", "https://unit.invalid/attendance.php?section=902", ["Pte. A. Other"],
+    [new WebsiteAttendanceEvent(
+        new DateTime(2026, 9, 2), "PDT",
+        [new WebsiteAttendanceMark("Pte. A. Other", WebsiteAttendanceStatus.Late)])]);
+var attendanceMonths = PlatoonAttendanceService.BuildMonths(
+    [parsedAttendance, secondAttendanceSection]);
+Check(attendanceMonths.Count == 2 && attendanceMonths[0].Label == "September 2026" &&
+      attendanceMonths[0].Events.Count == 1,
+    "platoon attendance grouped by month and event date");
+Check(attendanceMonths[0].Events[0].Marks.Select(mark => mark.Status).SequenceEqual(
+        [WebsiteAttendanceStatus.Present, WebsiteAttendanceStatus.Excused,
+         WebsiteAttendanceStatus.Late]),
+    "section attendance merged into platoon-wide event rows");
+Check(attendanceMonths[1].Events[0].Marks[^1].Status == WebsiteAttendanceStatus.Unknown,
+    "missing section attendance remains a neutral no-record state");
+
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
     "checksum parsing");
@@ -177,7 +194,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (23 checks).");
+Console.WriteLine("Automated tests passed (26 checks).");
 return 0;
 
 void Check(bool condition, string name)

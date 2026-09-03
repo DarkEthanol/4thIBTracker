@@ -22,7 +22,7 @@ public record WebsiteAttendanceMark(string Member, WebsiteAttendanceStatus Statu
     public string Label => Status switch
     {
         WebsiteAttendanceStatus.NotRequired => "Not Required",
-        WebsiteAttendanceStatus.Unknown => "Unknown",
+        WebsiteAttendanceStatus.Unknown => "No record",
         _ => Status.ToString(),
     };
 
@@ -39,6 +39,17 @@ public record WebsiteAttendanceMark(string Member, WebsiteAttendanceStatus Statu
 
     public string Foreground => Status is WebsiteAttendanceStatus.Late or
         WebsiteAttendanceStatus.Reserves ? "#16181A" : "#FFFFFF";
+
+    public string ShortLabel => Status switch
+    {
+        WebsiteAttendanceStatus.Present => "P",
+        WebsiteAttendanceStatus.Late => "L",
+        WebsiteAttendanceStatus.Absent => "A",
+        WebsiteAttendanceStatus.Excused => "E",
+        WebsiteAttendanceStatus.Reserves => "R",
+        WebsiteAttendanceStatus.NotRequired => "N/R",
+        _ => "—",
+    };
 }
 
 public record WebsiteAttendanceEvent(
@@ -57,6 +68,16 @@ public record WebsiteAttendanceSection(
 {
     public string Summary => $"{Members.Count} member{(Members.Count == 1 ? "" : "s")} · " +
                              $"{Events.Count} record{(Events.Count == 1 ? "" : "s")}";
+}
+
+public record WebsiteAttendanceMonth(
+    DateTime Month,
+    IReadOnlyList<string> Members,
+    IReadOnlyList<WebsiteAttendanceEvent> Events)
+{
+    public string Label => Month.ToString("MMMM yyyy");
+    public string Summary => $"{Members.Count} member{(Members.Count == 1 ? "" : "s")} · " +
+                             $"{Events.Count} event{(Events.Count == 1 ? "" : "s")}";
 }
 
 /// <summary>
@@ -219,6 +240,53 @@ public static partial class PlatoonAttendanceService
 
         throw new InvalidOperationException(
             $"The attendance grid for {section.Name} was not recognised. The website layout may have changed.");
+    }
+
+    public static IReadOnlyList<WebsiteAttendanceMonth> BuildMonths(
+        IReadOnlyList<WebsiteAttendanceSection> sections)
+    {
+        var members = sections
+            .SelectMany(section => section.Members)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var combinedEvents = new List<WebsiteAttendanceEvent>();
+        foreach (var dateGroup in sections
+                     .SelectMany(section => section.Events)
+                     .GroupBy(record => record.Date.Date)
+                     .OrderByDescending(group => group.Key))
+        {
+            var eventName = dateGroup
+                .Where(record => !string.IsNullOrWhiteSpace(record.Name))
+                .GroupBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(group => group.Count())
+                .ThenBy(group => group.Key)
+                .Select(group => group.First().Name)
+                .FirstOrDefault() ?? "Event";
+
+            var statuses = new Dictionary<string, WebsiteAttendanceStatus>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var record in dateGroup)
+                foreach (var mark in record.Marks)
+                    statuses[mark.Member] = mark.Status;
+
+            combinedEvents.Add(new WebsiteAttendanceEvent(
+                dateGroup.Key,
+                eventName,
+                members.Select(member => new WebsiteAttendanceMark(
+                    member,
+                    statuses.GetValueOrDefault(member, WebsiteAttendanceStatus.Unknown)))
+                    .ToList()));
+        }
+
+        return combinedEvents
+            .GroupBy(record => new DateTime(record.Date.Year, record.Date.Month, 1))
+            .OrderByDescending(group => group.Key)
+            .Select(group => new WebsiteAttendanceMonth(
+                group.Key,
+                members,
+                group.OrderByDescending(record => record.Date).ToList()))
+            .ToList();
     }
 
     public static WebsiteAttendanceStatus ParseStatus(string cellHtml)

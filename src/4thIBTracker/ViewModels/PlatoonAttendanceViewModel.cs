@@ -12,7 +12,7 @@ public partial class PlatoonAttendanceViewModel : ObservableObject
     public Func<string, Task<string>>? FetchHtml { get; set; }
     public Func<IReadOnlyList<string>, Task<IReadOnlyList<string>>>? FetchHtmlBatch { get; set; }
 
-    public ObservableCollection<WebsiteAttendanceSection> Sections { get; } = new();
+    public ObservableCollection<WebsiteAttendanceMonth> Months { get; } = new();
     public IReadOnlyList<WebsiteAttendanceMark> Legend { get; } =
     [
         new("", WebsiteAttendanceStatus.Present),
@@ -21,9 +21,10 @@ public partial class PlatoonAttendanceViewModel : ObservableObject
         new("", WebsiteAttendanceStatus.Excused),
         new("", WebsiteAttendanceStatus.Reserves),
         new("", WebsiteAttendanceStatus.NotRequired),
+        new("", WebsiteAttendanceStatus.Unknown),
     ];
 
-    [ObservableProperty] private WebsiteAttendanceSection? selectedSection;
+    [ObservableProperty] private WebsiteAttendanceMonth? selectedMonth;
     [ObservableProperty] private bool isLoading;
     [ObservableProperty] private string? error;
     [ObservableProperty] private string statusMessage =
@@ -68,16 +69,18 @@ public partial class PlatoonAttendanceViewModel : ObservableObject
 
             var parsed = links.Select((link, index) =>
                 PlatoonAttendanceService.ParseSection(pages[index], link)).ToList();
-            var selectedName = SelectedSection?.Name;
-            Sections.Clear();
-            foreach (var section in parsed) Sections.Add(section);
-            SelectedSection = Sections.FirstOrDefault(section => section.Name == selectedName) ??
-                              Sections.FirstOrDefault();
+            var selectedMonth = SelectedMonth?.Month;
+            var months = PlatoonAttendanceService.BuildMonths(parsed);
+            Months.Clear();
+            foreach (var month in months) Months.Add(month);
+            SelectedMonth = Months.FirstOrDefault(month => month.Month == selectedMonth) ??
+                            Months.FirstOrDefault();
             HasLoaded = true;
 
-            var records = Sections.Sum(section => section.Events.Count);
-            StatusMessage = $"{records} record(s) across {Sections.Count} {_config.Platoon.Name} " +
-                            $"section(s), refreshed at {DateTime.Now:HH:mm}.";
+            var events = Months.Sum(month => month.Events.Count);
+            var members = Months.FirstOrDefault()?.Members.Count ?? 0;
+            StatusMessage = $"{events} event date(s) across {Months.Count} month(s) for " +
+                            $"{members} {_config.Platoon.Name} member(s), refreshed at {DateTime.Now:HH:mm}.";
         }
         catch (Exception ex)
         {

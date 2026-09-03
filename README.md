@@ -14,8 +14,9 @@ Built with C# / WPF (.NET 8), the Google Sheets API, and WebView2.
   Present → LOA → Late → AWOL → Excused (matching the sheet's colour legend),
   then Save writes the colours back to the real sheet.
 - **Platoon Attendance** — read-only website attendance history for the configured
-  platoon. The app discovers HQ and section links dynamically from the authenticated
-  tracker instead of relying on its internal section IDs.
+  platoon, combined into monthly platoon-wide matrices. The app discovers HQ and
+  section links dynamically from the authenticated tracker instead of relying on
+  its internal section IDs.
 - **Courses** — the Section Courses matrix as a colour-coded grid with a
   "who still needs X" filter.
 - **Campaign Medals** — finds the highest medal currently earned but not yet

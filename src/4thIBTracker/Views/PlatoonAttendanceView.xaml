@@ -16,9 +16,9 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             HorizontalAlignment="Right" VerticalAlignment="Top">
                     <ComboBox Width="190" Margin="0,0,8,0"
-                              ItemsSource="{Binding Sections}"
-                              SelectedItem="{Binding SelectedSection}"
-                              DisplayMemberPath="Name"/>
+                              ItemsSource="{Binding Months}"
+                              SelectedItem="{Binding SelectedMonth}"
+                              DisplayMemberPath="Label"/>
                     <Button Content="↻ Refresh" Padding="12,5" FontWeight="SemiBold"
                             Command="{Binding RefreshCommand}"/>
                 </StackPanel>
@@ -41,7 +41,7 @@
             </ProgressBar>
 
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,2,0,10">
-                <TextBlock Text="{Binding SelectedSection.Summary}" Foreground="{StaticResource TextDim}"
+                <TextBlock Text="{Binding SelectedMonth.Summary}" Foreground="{StaticResource TextDim}"
                            VerticalAlignment="Center" Margin="0,0,18,0"/>
                 <ItemsControl ItemsSource="{Binding Legend}">
                     <ItemsControl.ItemsPanel>
@@ -59,43 +59,40 @@
                 </ItemsControl>
             </StackPanel>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
-                <ItemsControl ItemsSource="{Binding SelectedSection.Events}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                                <StackPanel>
-                                    <DockPanel Margin="0,0,0,8">
-                                        <TextBlock Text="{Binding DateLabel}" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource Accent}"/>
-                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Name}"
-                                                   FontWeight="SemiBold" Foreground="{StaticResource TextMain}"
-                                                   TextWrapping="Wrap"/>
-                                    </DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Marks}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Background="{Binding Background}" CornerRadius="4"
-                                                        Padding="8,4" Margin="0,0,6,6">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding Member}" FontWeight="SemiBold"
-                                                                   Foreground="{Binding Foreground}"/>
-                                                        <TextBlock Text="  ·  " Foreground="{Binding Foreground}"/>
-                                                        <TextBlock Text="{Binding Label}" Foreground="{Binding Foreground}"/>
-                                                    </StackPanel>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <DataGrid x:Name="AttendanceGrid"
+                      ItemsSource="{Binding SelectedMonth.Events}"
+                      AutoGenerateColumns="False" IsReadOnly="True"
+                      HeadersVisibility="Column" GridLinesVisibility="All"
+                      HorizontalGridLinesBrush="#20FFFFFF"
+                      VerticalGridLinesBrush="#30FFFFFF"
+                      Background="Transparent"
+                      RowBackground="{StaticResource BgPanel}"
+                      AlternatingRowBackground="#2B2F33"
+                      Foreground="{StaticResource TextMain}"
+                      BorderThickness="0"
+                      RowHeight="42" FontSize="14"
+                      ColumnHeaderHeight="68"
+                      FrozenColumnCount="2"
+                      CanUserResizeRows="False" CanUserReorderColumns="False"
+                      CanUserAddRows="False" CanUserDeleteRows="False"
+                      SelectionMode="Single" SelectionUnit="FullRow"
+                      EnableColumnVirtualization="False" EnableRowVirtualization="True"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <DataGrid.CellStyle>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                        <Setter Property="BorderBrush" Value="#20FFFFFF"/>
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                    </Style>
+                </DataGrid.CellStyle>
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
+                    </Style>
+                </DataGrid.RowStyle>
+            </DataGrid>
         </DockPanel>
     </Grid>
 </UserControl>
