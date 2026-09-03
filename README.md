@@ -10,13 +10,10 @@ Built with C# / WPF (.NET 8), the Google Sheets API, and WebView2.
 
 - **Dashboard** — active disciplinaries (computed from expiry dates), outstanding
   course counts, and the platoon ORBAT at a glance.
-- **Attendance** — the configured platoon tab as clickable cells. Click to cycle
-  Present → LOA → Late → AWOL → Excused (matching the sheet's colour legend),
-  then Save writes the colours back to the real sheet.
-- **Platoon Attendance** — read-only website attendance history for the configured
-  platoon, grouped by month with separate HQ and section matrices. The app discovers
-  those links dynamically from the authenticated tracker instead of relying on its
-  internal section IDs.
+- **Attendance** — one split workspace with the editable Google Sheets tracker on
+  top and read-only website history below. Sheet cells can be painted and saved;
+  website records are grouped by month into separate HQ and section matrices. The
+  app discovers website section links dynamically rather than relying on internal IDs.
 - **Courses** — the Section Courses matrix as a colour-coded grid with a
   "who still needs X" filter.
 - **Campaign Medals** — finds the highest medal currently earned but not yet

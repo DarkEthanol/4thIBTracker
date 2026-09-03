@@ -9,9 +9,17 @@
         <DockPanel Margin="20">
             <DockPanel DockPanel.Dock="Top">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource H1}" Text="Platoon Attendance"/>
-                    <TextBlock Text="Read-only records from the website attendance tracker"
-                               Foreground="{StaticResource TextDim}" Margin="0,-10,0,12"/>
+                    <TextBlock Style="{StaticResource H1}" Text="Website Attendance History"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,-10,0,12">
+                        <Border Background="#4D5459" CornerRadius="9" Padding="8,2"
+                                Margin="0,0,8,0">
+                            <TextBlock Text="READ ONLY" FontSize="11.5" FontWeight="Bold"
+                                       Foreground="{StaticResource TextMain}"/>
+                        </Border>
+                        <TextBlock Text="Source: website attendance tool · records cannot be changed here"
+                                   FontSize="13" Foreground="{StaticResource TextDim}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             HorizontalAlignment="Right" VerticalAlignment="Top">

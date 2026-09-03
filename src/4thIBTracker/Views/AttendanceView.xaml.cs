@@ -9,11 +9,14 @@ public partial class AttendanceView : UserControl
 {
     private readonly AttendanceViewModel _vm;
 
-    public AttendanceView(AttendanceViewModel vm)
+    public AttendanceView(
+        AttendanceViewModel vm,
+        PlatoonAttendanceViewModel websiteAttendanceViewModel)
     {
         InitializeComponent();
         _vm = vm;
         DataContext = vm;
+        WebsiteAttendanceHost.Content = new PlatoonAttendanceView(websiteAttendanceViewModel);
         Focusable = true;
         Loaded += async (_, _) =>
         {

@@ -135,7 +135,6 @@
                             </Grid>
                         </Button>
                         <Button Style="{StaticResource NavButton}" Content="  Attendance"  Click="NavAttendance_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Platoon Attendance" Click="NavPlatoonAttendance_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="  Courses"     Click="NavCourses_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="  Medals"      Click="NavCampaignMedals_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="  CEFO"        Click="NavCefo_Click"/>

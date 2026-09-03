@@ -20,7 +20,6 @@ public partial class MainWindow : Window
     // Views are created once and cached so their state (and WebView2 sessions) survive navigation.
     private DashboardView? _dashboard;
     private AttendanceView? _attendance;
-    private PlatoonAttendanceView? _platoonAttendance;
     private CoursesView? _courses;
     private CampaignMedalsView? _campaignMedals;
     private CefoView? _cefo;
@@ -141,11 +140,9 @@ public partial class MainWindow : Window
         ContentHost.Content = _dashboard ??= new DashboardView(new DashboardViewModel(_sheets, _config));
 
     private void NavAttendance_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _attendance ??= new AttendanceView(new AttendanceViewModel(_sheets, _config));
-
-    private void NavPlatoonAttendance_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _platoonAttendance ??=
-            new PlatoonAttendanceView(new PlatoonAttendanceViewModel(_config));
+        ContentHost.Content = _attendance ??= new AttendanceView(
+            new AttendanceViewModel(_sheets, _config),
+            new PlatoonAttendanceViewModel(_config));
 
     private void NavCourses_Click(object sender, RoutedEventArgs e) =>
         ContentHost.Content = _courses ??= new CoursesView(new CoursesViewModel(_sheets, _config));
@@ -230,7 +227,6 @@ public partial class MainWindow : Window
         _sheets = new GoogleSheetsService(_config);
         _dashboard = null;
         _attendance = null;
-        _platoonAttendance = null;
         _courses = null;
         _campaignMedals = null;
         _cefo = null;
