@@ -228,9 +228,9 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Platoon forum"/>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Platoon LOA parent forum"/>
                             <TextBox Grid.Column="1" Text="{Binding PlatoonForumUrl}"
-                                     ToolTip="The platoon's parent forum; its HQ and section LOA forums are discovered automatically"/>
+                                     ToolTip="Set this separately for each platoon. Its HQ and section LOA forums are discovered automatically."/>
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
