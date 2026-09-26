@@ -42,8 +42,8 @@ public record LoaSectionGroup(string Name, IReadOnlyList<LoaMemberRow> Members)
 /// <summary>
 /// Parses the platoon forum's dynamically linked LOA areas. The forum is not a
 /// database: members reuse personal threads and post in several different date
-/// formats, so the parser treats each reply as the record and never the thread
-/// title as the soldier's identity.
+/// formats. Each reply is a record in the member named by the personal thread;
+/// an explicit name in the reply body takes precedence for on-behalf posts.
 /// </summary>
 public static partial class ForumLoaService
 {
@@ -64,9 +64,6 @@ public static partial class ForumLoaService
         RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex PostDateRx = new(
         @"<[^>]*class\s*=\s*['""][^'""]*\bpost_date\b[^'""]*['""][^>]*>(?<date>.*?)</",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline);
-    private static readonly Regex UserRx = new(
-        @"<a\b[^>]*href\s*=\s*['""][^'""]*user-\d+\.html[^'""]*['""][^>]*>(?<name>.*?)</a>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex NumericDateRx = new(
         @"(?<!\d)(?<day>\d{1,2})\s*[./-]\s*(?<month>\d{1,2})(?:\s*[./-]\s*(?<year>\d{2,4}))?(?!\d)",
@@ -178,7 +175,7 @@ public static partial class ForumLoaService
             : new Uri(uri, $"thread-{match.Groups["id"].Value}-page-{page}.html").AbsoluteUri;
     }
 
-    public static IReadOnlyList<LoaPost> ParsePosts(string html, string threadUrl)
+    public static IReadOnlyList<LoaPost> ParsePosts(string html, LoaThread thread)
     {
         var starts = PostStartRx.Matches(html).Cast<Match>().ToList();
         var posts = new List<LoaPost>();
@@ -197,17 +194,18 @@ public static partial class ForumLoaService
             body = Regex.Replace(body,
                 @"\s*/\s*(?=(?:Rank(?:\s+(?:and|&)\s+Name)?|Name|Date(?:\(s\)|s)?|Reason)\s*:)",
                 "\n", RegexOptions.IgnoreCase);
-            var authorMatch = UserRx.Match(block);
-            var author = authorMatch.Success ? DecodeText(authorMatch.Groups["name"].Value) : "";
             var posted = ParsePostedDate(PostDateRx.Match(block).Groups["date"].Value);
             if (posted is null) continue;
 
-            var person = PersonFrom(body, author);
+            // The thread is the member's personal LOA record. Reply authors may
+            // be NCOs posting in that thread, so only an explicit body name may
+            // override the thread owner.
+            var person = PersonFrom(body, thread.Title);
             if (person.Length == 0) continue;
             var reason = ReasonLineRx.Match(body) is { Success: true } reasonMatch
                 ? CleanField(reasonMatch.Groups["value"].Value)
                 : "";
-            var postUrl = PostUrl(threadUrl, start.Groups["id"].Value);
+            var postUrl = PostUrl(thread.Url, start.Groups["id"].Value);
             foreach (var date in DatesFrom(body, posted.Value))
                 posts.Add(new LoaPost(person, date, reason, postUrl, posted.Value));
         }

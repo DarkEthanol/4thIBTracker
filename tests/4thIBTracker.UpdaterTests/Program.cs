@@ -173,11 +173,12 @@ var loaPostsHtml = """
     <div class="posts2 post classic" id="post_171116">
       <a href="user-203.html">Pte. B. Lucas</a>
       <span class="post_date">01-07-2026, 12:00 PM</span>
-      <div class="post_body">Date(s): 12.7, 19.7 and 26.7</div>
+      <div class="post_body">Name: B. Lucas<br>Rank: Pte.<br>Date(s): 12.7, 19.7 and 26.7</div>
     </div>
     """;
 var loaPosts = ForumLoaService.ParsePosts(
-    loaPostsHtml, "https://unit.invalid/thread-101.html");
+    loaPostsHtml, new LoaThread(
+        "1 Section", "C. Morgan", "https://unit.invalid/thread-101.html"));
 Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "c. morgan" &&
                            post.Date == new DateTime(2026, 9, 26)),
     "relative LOA date resolved against forum post date");
@@ -189,6 +190,33 @@ Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "a. foi
     "single-line LOA template and dotted date parsing");
 Check(loaPosts.Count(post => ForumLoaService.NormalizeName(post.Person) == "b. lucas") == 3,
     "multiple abbreviated LOA dates parsing");
+
+var wrongAuthorPost = ForumLoaService.ParsePosts("""
+    <div class="posts2 post classic" id="post_171120">
+      <a href="user-202.html">LCpl. A. Foica</a>
+      <span class="post_date"><span title="26-09-2026, 11:00 AM">2 hours ago</span></span>
+      <div class="post_body">Date: 26/09/2026<br>Reason: Dinner</div>
+    </div>
+    """, new LoaThread(
+        "2 Section", "M. Atilla", "https://unit.invalid/thread-300.html"));
+Check(wrongAuthorPost.Count == 1 &&
+      ForumLoaService.NormalizeName(wrongAuthorPost[0].Person) == "m. atilla",
+    "personal LOA thread owner takes precedence over reply author");
+var wrongAuthorRoster = ForumLoaService.BuildRosterStatus(
+    wrongAuthorPost,
+    [
+        new LoaThread("2 Section", "M. Atilla", "https://unit.invalid/thread-300.html"),
+        new LoaThread("2 Section", "A. Foica", "https://unit.invalid/thread-301.html"),
+    ],
+    new Dictionary<string, List<string>>
+    {
+        ["HQ"] = [], ["1 Section"] = [],
+        ["2 Section"] = ["A. Foica", "M. Atilla"], ["3 Section"] = [],
+    },
+    new DateTime(2026, 9, 26));
+Check(!wrongAuthorRoster.Single(group => group.Name == "2 Section").Members[0].IsLoa &&
+      wrongAuthorRoster.Single(group => group.Name == "2 Section").Members[1].IsLoa,
+    "reply in another member's thread does not mark the author as LOA");
 
 var loaOrbat = new Dictionary<string, List<string>>
 {
@@ -307,7 +335,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (41 checks).");
+Console.WriteLine("Automated tests passed (43 checks).");
 return 0;
 
 void Check(bool condition, string name)

@@ -96,7 +96,7 @@ public partial class LoaViewModel : ObservableObject
             await Task.WhenAll(lastPagesTask, orbatTask);
 
             var posts = threads.SelectMany((thread, index) =>
-                    ForumLoaService.ParsePosts(lastPagesTask.Result[index], thread.Url))
+                    ForumLoaService.ParsePosts(lastPagesTask.Result[index], thread))
                 .ToList();
             var olderPagePlans = threads.SelectMany((thread, index) =>
                     Enumerable.Range(1, Math.Max(0,
@@ -114,7 +114,7 @@ public partial class LoaViewModel : ObservableObject
                 var olderPages = await FetchManyAsync(
                     olderPagePlans.Select(page => page.Url).ToList());
                 posts.AddRange(olderPagePlans.SelectMany((page, index) =>
-                    ForumLoaService.ParsePosts(olderPages[index], page.Thread.Url)));
+                    ForumLoaService.ParsePosts(olderPages[index], page.Thread)));
             }
 
             var groups = ForumLoaService.BuildRosterStatus(
