@@ -70,6 +70,7 @@ public class AppConfig
         public string UpcomingForumUrl { get; set; } = "";
         public string PatrolReportsForumUrl { get; set; } = "";
         public string TrainingReportsForumUrl { get; set; } = "";
+        public string PlatoonForumUrl { get; set; } = "";
         public string OperationsIndexUrl { get; set; } = "";
         public List<string> PendingTransferForums { get; set; } = new();
         public List<string> CompletedTransferForums { get; set; } = new();

@@ -118,6 +118,86 @@ Check(AttendanceStatus.Present.ToColor().ToString() == "#FF6AA84F" &&
       AttendanceStatus.Awol.ToColor().ToString() == "#FFFF0000",
     "editable attendance uses website attendance colours");
 
+var platoonForum = """
+    <a href="forum-24.html">1 Platoon, HQ</a>
+    <span>Sub Forums:</span> <a href="forum-801.html">LOA</a>
+    <a href="forum-68.html">1 Platoon, 1 Section</a>
+    <a href="forum-802.html">LOA</a>
+    <a href="forum-27.html">1 Platoon, 2 Section</a>
+    <a href="forum-803.html">LOA</a>
+    <a href="forum-999.html">11 Platoon, 1 Section</a>
+    <a href="forum-9991.html">LOA</a>
+    """;
+var loaForums = ForumLoaService.FindLoaSections(
+    platoonForum, "https://unit.invalid/forum-25.html", 1);
+Check(loaForums.Select(section => section.Name)
+        .SequenceEqual(["HQ", "1 Section", "2 Section"]),
+    "dynamic platoon LOA forum discovery");
+Check(loaForums[1].Url == "https://unit.invalid/forum-802.html",
+    "relative LOA forum URL resolution");
+
+var loaThreadList = """
+    <a href="thread-100.html">LOA Format</a>
+    <a href="thread-101.html">Pte. Someone</a>
+    <a href="thread-101-lastpost.html">Last post</a>
+    """;
+var loaThreads = ForumLoaService.ParseThreads(
+    loaThreadList, "https://unit.invalid/forum-802.html", "1 Section");
+Check(loaThreads.Count == 1 && loaThreads[0].Url == "https://unit.invalid/thread-101.html",
+    "personal LOA thread parsing and format-thread exclusion");
+Check(ForumLoaService.LastPostUrl(loaThreads[0].Url) ==
+      "https://unit.invalid/thread-101-lastpost.html",
+    "LOA latest-page URL generation");
+
+var loaPostsHtml = """
+    <div class="posts2 post classic" id="post_171113">
+      <a href="user-200.html">Cpl. C. Morgan</a>
+      <span class="post_date"><span title="25-09-2026">Yesterday</span>, 04:50 PM</span>
+      <div class="post_body scaleimages">tomorrow<br><br>ruggers</div>
+    </div>
+    <div class="posts2 post classic" id="post_171114">
+      <a href="user-201.html">A/Cpl. C. Rhodes</a>
+      <span class="post_date">09-09-2026, 12:00 PM</span>
+      <div class="post_body">Name: M. Sobczak<br>Rank: Pte.<br>Date: 26/09/26<br>Reason: Away</div>
+    </div>
+    <div class="posts2 post classic" id="post_171115">
+      <a href="user-202.html">LCpl. A. Foica</a>
+      <span class="post_date">20-09-2026, 12:00 PM</span>
+      <div class="post_body">Rank and Name: LCpl. A. Foica / Date(s): 26.09.2026 / Reason: Work</div>
+    </div>
+    <div class="posts2 post classic" id="post_171116">
+      <a href="user-203.html">Pte. B. Lucas</a>
+      <span class="post_date">01-07-2026, 12:00 PM</span>
+      <div class="post_body">Date(s): 12.7, 19.7 and 26.7</div>
+    </div>
+    """;
+var loaPosts = ForumLoaService.ParsePosts(
+    loaPostsHtml, "https://unit.invalid/thread-101.html");
+Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "c. morgan" &&
+                           post.Date == new DateTime(2026, 9, 26)),
+    "relative LOA date resolved against forum post date");
+Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "m. sobczak" &&
+                           post.Date == new DateTime(2026, 9, 26) && post.Reason == "Away"),
+    "on-behalf LOA identity and two-digit date parsing");
+Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "a. foica" &&
+                           post.Date == new DateTime(2026, 9, 26) && post.Reason == "Work"),
+    "single-line LOA template and dotted date parsing");
+Check(loaPosts.Count(post => ForumLoaService.NormalizeName(post.Person) == "b. lucas") == 3,
+    "multiple abbreviated LOA dates parsing");
+
+var loaOrbat = new Dictionary<string, List<string>>
+{
+    ["HQ"] = [],
+    ["1 Section"] = ["C. Morgan"],
+    ["2 Section"] = ["A. Foica", "B. Lucas"],
+    ["3 Section"] = ["M. Sobczak"],
+};
+var matchedLoas = ForumLoaService.MatchToOrbat(
+    loaPosts, loaOrbat, new DateTime(2026, 9, 26));
+Check(matchedLoas.SelectMany(group => group.Entries).Count() == 3 &&
+      matchedLoas.Single(group => group.Name == "3 Section").Entries[0].Name == "M. Sobczak",
+    "LOAs cross-checked and regrouped by current ORBAT");
+
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
     "checksum parsing");
@@ -210,7 +290,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (30 checks).");
+Console.WriteLine("Automated tests passed (39 checks).");
 return 0;
 
 void Check(bool condition, string name)

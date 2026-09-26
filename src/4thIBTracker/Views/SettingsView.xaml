@@ -228,6 +228,15 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Platoon forum"/>
+                            <TextBox Grid.Column="1" Text="{Binding PlatoonForumUrl}"
+                                     ToolTip="The platoon's parent forum; its HQ and section LOA forums are discovered automatically"/>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="230"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <TextBlock Style="{StaticResource RowLabel}" Text="Completed courses forum"/>
                             <TextBox Grid.Column="1" Text="{Binding CoursesForumUrl}"/>
                         </Grid>

@@ -47,6 +47,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string upcomingForumUrl = "";
     [ObservableProperty] private string patrolReportsForumUrl = "";
     [ObservableProperty] private string trainingReportsForumUrl = "";
+    [ObservableProperty] private string platoonForumUrl = "";
     [ObservableProperty] private string operationsIndexUrl = "";
     [ObservableProperty] private string pendingTransferForums = "";
     [ObservableProperty] private string completedTransferForums = "";
@@ -88,6 +89,7 @@ public partial class SettingsViewModel : ObservableObject
         upcomingForumUrl = config.Forum.UpcomingForumUrl;
         patrolReportsForumUrl = config.Forum.PatrolReportsForumUrl;
         trainingReportsForumUrl = config.Forum.TrainingReportsForumUrl;
+        platoonForumUrl = config.Forum.PlatoonForumUrl;
         operationsIndexUrl = config.Forum.OperationsIndexUrl;
         pendingTransferForums = string.Join(Environment.NewLine, config.Forum.PendingTransferForums);
         completedTransferForums = string.Join(Environment.NewLine, config.Forum.CompletedTransferForums);
@@ -185,6 +187,7 @@ public partial class SettingsViewModel : ObservableObject
             _config.Forum.UpcomingForumUrl = UpcomingForumUrl.Trim();
             _config.Forum.PatrolReportsForumUrl = PatrolReportsForumUrl.Trim();
             _config.Forum.TrainingReportsForumUrl = TrainingReportsForumUrl.Trim();
+            _config.Forum.PlatoonForumUrl = PlatoonForumUrl.Trim();
             _config.Forum.OperationsIndexUrl = OperationsIndexUrl.Trim();
             _config.Forum.PendingTransferForums = SplitList(PendingTransferForums, '\n');
             _config.Forum.CompletedTransferForums = SplitList(CompletedTransferForums, '\n');
