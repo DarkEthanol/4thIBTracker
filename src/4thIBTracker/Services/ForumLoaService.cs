@@ -13,11 +13,30 @@ public record LoaPost(
     string Reason,
     string Url,
     DateTime PostedDate);
-public record LoaEntry(string Name, string Section, string Reason, string Url);
-public record LoaSectionGroup(string Name, IReadOnlyList<LoaEntry> Entries)
+public record LoaMemberRow(
+    string Name,
+    string Section,
+    bool IsLoa,
+    bool HasThread,
+    string Reason,
+    string Url)
 {
-    public string CountLabel => Entries.Count == 1 ? "1 LOA" : $"{Entries.Count} LOAs";
-    public bool HasEntries => Entries.Count > 0;
+    public string StatusIcon => IsLoa ? "✕" : HasThread ? "✓" : "!";
+    public string StatusLabel => IsLoa ? "LOA" : HasThread ? "Attending" : "No thread";
+    public string StatusColor => IsLoa ? "#FF0000" : HasThread ? "#6AA84F" : "#FF9900";
+    public bool MissingThread => !HasThread;
+    public bool ShowThreadWarning => MissingThread && IsLoa;
+    public bool CanOpen => Url.Length > 0;
+    public string LinkLabel => IsLoa ? "Post ↗" : "Thread ↗";
+}
+
+public record LoaSectionGroup(string Name, IReadOnlyList<LoaMemberRow> Members)
+{
+    public int LoaCount => Members.Count(member => member.IsLoa);
+    public int AttendingCount => Members.Count(member => !member.IsLoa && member.HasThread);
+    public int MissingThreadCount => Members.Count(member => member.MissingThread);
+    public string CountLabel => $"{LoaCount} LOA · {AttendingCount} attending" +
+                                (MissingThreadCount == 0 ? "" : $" · {MissingThreadCount} missing thread");
 }
 
 /// <summary>
@@ -133,6 +152,32 @@ public static partial class ForumLoaService
         return new Uri(uri, $"thread-{match.Groups["id"].Value}-lastpost.html").AbsoluteUri;
     }
 
+    public static int LastThreadPage(string html, string threadUrl)
+    {
+        var threadId = Regex.Match(new Uri(threadUrl).AbsolutePath,
+            @"thread-(?<id>\d+)", RegexOptions.IgnoreCase).Groups["id"].Value;
+        var last = 1;
+        foreach (Match match in Regex.Matches(html,
+                     @"thread-(?<id>\d+)-page-(?<page>\d+)\.html",
+                     RegexOptions.IgnoreCase))
+        {
+            if (threadId.Length > 0 && match.Groups["id"].Value != threadId) continue;
+            if (int.TryParse(match.Groups["page"].Value, out var page))
+                last = Math.Max(last, page);
+        }
+        return last;
+    }
+
+    public static string ThreadPageUrl(string threadUrl, int page)
+    {
+        if (page <= 1) return threadUrl;
+        var uri = new Uri(threadUrl);
+        var match = Regex.Match(uri.AbsolutePath, @"thread-(?<id>\d+)", RegexOptions.IgnoreCase);
+        return !match.Success
+            ? threadUrl
+            : new Uri(uri, $"thread-{match.Groups["id"].Value}-page-{page}.html").AbsoluteUri;
+    }
+
     public static IReadOnlyList<LoaPost> ParsePosts(string html, string threadUrl)
     {
         var starts = PostStartRx.Matches(html).Cast<Match>().ToList();
@@ -169,45 +214,42 @@ public static partial class ForumLoaService
         return posts;
     }
 
-    public static IReadOnlyList<LoaSectionGroup> MatchToOrbat(
+    public static IReadOnlyList<LoaSectionGroup> BuildRosterStatus(
         IEnumerable<LoaPost> posts,
+        IEnumerable<LoaThread> threads,
         IReadOnlyDictionary<string, List<string>> orbat,
         DateTime selectedDate)
     {
-        var roster = orbat
-            .SelectMany(section => section.Value.Select((name, order) => new
-            {
-                Section = section.Key,
-                Name = name,
-                Order = order,
-                Key = NormalizeName(name),
-            }))
-            .GroupBy(member => member.Key)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
-        var entries = posts
+        var loaByMember = posts
             .Where(post => post.Date.Date == selectedDate.Date)
             .Select(post => new { Post = post, Key = NormalizeName(post.Person) })
-            .Where(item => roster.ContainsKey(item.Key))
             .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderByDescending(item => item.Post.PostedDate).First())
-            .Select(item =>
-            {
-                var member = roster[item.Key];
-                return new
-                {
-                    member.Section,
-                    member.Order,
-                    Entry = new LoaEntry(member.Name, member.Section, item.Post.Reason, item.Post.Url),
-                };
-            })
-            .ToList();
+            .ToDictionary(item => item.Key, item => item.Post, StringComparer.OrdinalIgnoreCase);
+
+        var threadByMember = threads
+            .Select(thread => new { Thread = thread, Key = NormalizeName(thread.Title) })
+            .Where(item => item.Key.Length > 0)
+            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Thread,
+                StringComparer.OrdinalIgnoreCase);
 
         return SectionNames.Select(section => new LoaSectionGroup(
             section,
-            entries.Where(item => string.Equals(item.Section, section, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(item => item.Order)
-                .Select(item => item.Entry)
+            orbat.GetValueOrDefault(section, [])
+                .Select(name =>
+                {
+                    var key = NormalizeName(name);
+                    var hasLoa = loaByMember.TryGetValue(key, out var loa);
+                    var hasThread = threadByMember.TryGetValue(key, out var thread);
+                    return new LoaMemberRow(
+                        name,
+                        section,
+                        hasLoa,
+                        hasThread,
+                        loa?.Reason ?? "",
+                        loa?.Url ?? thread?.Url ?? "");
+                })
                 .ToList())).ToList();
     }
 
@@ -266,7 +308,7 @@ public static partial class ForumLoaService
 
     private static DateTime? ParsePostedDate(string html)
     {
-        var title = Regex.Match(html, @"\btitle\s*=\s*['""](?<date>\d{1,2}-\d{1,2}-\d{4})['""]",
+        var title = Regex.Match(html, @"\btitle\s*=\s*['""](?<date>\d{1,2}-\d{1,2}-\d{4})(?:,?\s+[^'""]+)?['""]",
             RegexOptions.IgnoreCase);
         var text = title.Success ? title.Groups["date"].Value : DecodeText(html);
         foreach (var format in new[] { "d-M-yyyy", "dd-MM-yyyy", "d/M/yyyy", "dd/MM/yyyy" })

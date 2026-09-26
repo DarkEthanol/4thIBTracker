@@ -61,6 +61,26 @@ public partial class LoaViewModel : ObservableObject
             var forumPages = await FetchManyAsync(forums.Select(forum => forum.Url).ToList());
             var threads = forums.SelectMany((forum, index) =>
                     ForumLoaService.ParseThreads(forumPages[index], forum.Url, forum.Name))
+                .ToList();
+            var additionalForumPages = forums.SelectMany((forum, index) =>
+                    Enumerable.Range(2, Math.Max(0,
+                            ForumCoursesService.LastPage(forumPages[index], forum.Url) - 1))
+                        .Select(page => new
+                        {
+                            Forum = forum,
+                            Url = ForumCoursesService.PageUrl(forum.Url, page),
+                        }))
+                .ToList();
+            if (additionalForumPages.Count > 0)
+            {
+                var additionalHtml = await FetchManyAsync(
+                    additionalForumPages.Select(page => page.Url).ToList());
+                threads.AddRange(additionalForumPages.SelectMany((page, index) =>
+                    ForumLoaService.ParseThreads(
+                        additionalHtml[index], page.Forum.Url, page.Forum.Name)));
+            }
+
+            threads = threads
                 .GroupBy(thread => thread.Url, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First())
                 .ToList();
@@ -68,24 +88,50 @@ public partial class LoaViewModel : ObservableObject
                 throw new InvalidOperationException(
                     "No personal LOA threads were found. The forum layout may have changed.");
 
-            StatusMessage = $"Checking the latest replies in {threads.Count} LOA thread(s)…";
-            var pageUrls = threads.Select(thread => ForumLoaService.LastPostUrl(thread.Url)).ToList();
-            var threadPagesTask = FetchManyAsync(pageUrls);
+            StatusMessage = $"Checking replies in {threads.Count} personal LOA thread(s)…";
+            var lastPageUrls = threads.Select(thread => ForumLoaService.LastPostUrl(thread.Url)).ToList();
+            var lastPagesTask = FetchManyAsync(lastPageUrls);
             var orbatTask = OrbatWebService.FetchPlatoonAsync(
                 _config.OrbatUrl, _config.Platoon.Number);
-            await Task.WhenAll(threadPagesTask, orbatTask);
+            await Task.WhenAll(lastPagesTask, orbatTask);
 
             var posts = threads.SelectMany((thread, index) =>
-                    ForumLoaService.ParsePosts(threadPagesTask.Result[index], thread.Url))
+                    ForumLoaService.ParsePosts(lastPagesTask.Result[index], thread.Url))
                 .ToList();
-            var groups = ForumLoaService.MatchToOrbat(posts, orbatTask.Result, date);
+            var olderPagePlans = threads.SelectMany((thread, index) =>
+                    Enumerable.Range(1, Math.Max(0,
+                            ForumLoaService.LastThreadPage(lastPagesTask.Result[index], thread.Url) - 1))
+                        .Select(page => new
+                        {
+                            Thread = thread,
+                            Url = ForumLoaService.ThreadPageUrl(thread.Url, page),
+                        }))
+                .ToList();
+            if (olderPagePlans.Count > 0)
+            {
+                StatusMessage = $"Checking {olderPagePlans.Count + threads.Count} forum page(s) " +
+                                "for the selected operation night…";
+                var olderPages = await FetchManyAsync(
+                    olderPagePlans.Select(page => page.Url).ToList());
+                posts.AddRange(olderPagePlans.SelectMany((page, index) =>
+                    ForumLoaService.ParsePosts(olderPages[index], page.Thread.Url)));
+            }
+
+            var groups = ForumLoaService.BuildRosterStatus(
+                posts, threads, orbatTask.Result, date);
 
             Sections.Clear();
             foreach (var group in groups) Sections.Add(group);
             HasScanned = true;
-            var count = groups.Sum(group => group.Entries.Count);
-            StatusMessage = $"{count} {(count == 1 ? "LOA" : "LOAs")} for " +
-                            $"{date:dddd, dd MMMM yyyy} · refreshed at {DateTime.Now:HH:mm}.";
+            var loaCount = groups.Sum(group => group.LoaCount);
+            var attendingCount = groups.Sum(group => group.AttendingCount);
+            var missingThreads = groups.Sum(group => group.MissingThreadCount);
+            StatusMessage = $"{loaCount} {(loaCount == 1 ? "LOA" : "LOAs")} and " +
+                            $"{attendingCount} attending for {date:dddd, dd MMMM yyyy}" +
+                            (missingThreads == 0
+                                ? ""
+                                : $" · {missingThreads} missing personal LOA thread(s)") +
+                            $" · refreshed at {DateTime.Now:HH:mm}.";
         }
         catch (Exception ex)
         {
@@ -114,7 +160,7 @@ public partial class LoaViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Open(LoaEntry? entry)
+    private void Open(LoaMemberRow? entry)
     {
         if (entry is null) return;
         try

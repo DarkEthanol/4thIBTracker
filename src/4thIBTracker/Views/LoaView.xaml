@@ -67,32 +67,24 @@
                                                    Foreground="{StaticResource TextDim}" FontSize="12.5"/>
                                     </DockPanel>
 
-                                    <TextBlock Text="No LOAs recorded" FontSize="13"
-                                               Foreground="{StaticResource TextDim}" Margin="0,8,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding HasEntries}" Value="True">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-
-                                    <ItemsControl ItemsSource="{Binding Entries}">
+                                    <ItemsControl ItemsSource="{Binding Members}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border BorderBrush="#22FFFFFF" BorderThickness="0,0,0,1"
                                                         Padding="0,7">
-                                                    <DockPanel>
-                                                        <Button DockPanel.Dock="Right" Content="Open ↗" Padding="9,3"
-                                                                Margin="10,0,0,0" VerticalAlignment="Center"
-                                                                Command="{Binding DataContext.OpenCommand,
-                                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                CommandParameter="{Binding}"/>
-                                                        <StackPanel VerticalAlignment="Center">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="28"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Text="{Binding StatusIcon}"
+                                                                   Foreground="{Binding StatusColor}"
+                                                                   FontSize="18" FontWeight="Bold"
+                                                                   VerticalAlignment="Center"/>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding Name}" FontSize="14"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{StaticResource TextMain}"/>
@@ -110,8 +102,45 @@
                                                                     </Style>
                                                                 </TextBlock.Style>
                                                             </TextBlock>
+                                                            <TextBlock Text="⚠ No personal LOA thread"
+                                                                       Foreground="{StaticResource Warn}"
+                                                                       FontSize="11.5" FontWeight="SemiBold">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding ShowThreadWarning}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
                                                         </StackPanel>
-                                                    </DockPanel>
+
+                                                        <Border Grid.Column="2" CornerRadius="8" Padding="8,2"
+                                                                Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                Background="#22000000">
+                                                            <TextBlock Text="{Binding StatusLabel}"
+                                                                       Foreground="{Binding StatusColor}"
+                                                                       FontSize="12.5" FontWeight="Bold"/>
+                                                        </Border>
+                                                        <Button Grid.Column="3" Content="{Binding LinkLabel}" Padding="9,3"
+                                                                Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                Command="{Binding DataContext.OpenCommand,
+                                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding CanOpen}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                    </Grid>
                                                 </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>

@@ -148,11 +148,16 @@ Check(loaThreads.Count == 1 && loaThreads[0].Url == "https://unit.invalid/thread
 Check(ForumLoaService.LastPostUrl(loaThreads[0].Url) ==
       "https://unit.invalid/thread-101-lastpost.html",
     "LOA latest-page URL generation");
+Check(ForumLoaService.LastThreadPage(
+          "<a href=\"thread-101-page-4.html\">4</a>", loaThreads[0].Url) == 4 &&
+      ForumLoaService.ThreadPageUrl(loaThreads[0].Url, 3) ==
+          "https://unit.invalid/thread-101-page-3.html",
+    "LOA thread pagination discovery");
 
 var loaPostsHtml = """
     <div class="posts2 post classic" id="post_171113">
       <a href="user-200.html">Cpl. C. Morgan</a>
-      <span class="post_date"><span title="25-09-2026">Yesterday</span>, 04:50 PM</span>
+      <span class="post_date"><span title="25-09-2026, 04:50 PM">Yesterday</span>, 04:50 PM</span>
       <div class="post_body scaleimages">tomorrow<br><br>ruggers</div>
     </div>
     <div class="posts2 post classic" id="post_171114">
@@ -187,16 +192,28 @@ Check(loaPosts.Count(post => ForumLoaService.NormalizeName(post.Person) == "b. l
 
 var loaOrbat = new Dictionary<string, List<string>>
 {
-    ["HQ"] = [],
+    ["HQ"] = ["N. Missing"],
     ["1 Section"] = ["C. Morgan"],
     ["2 Section"] = ["A. Foica", "B. Lucas"],
     ["3 Section"] = ["M. Sobczak"],
 };
-var matchedLoas = ForumLoaService.MatchToOrbat(
-    loaPosts, loaOrbat, new DateTime(2026, 9, 26));
-Check(matchedLoas.SelectMany(group => group.Entries).Count() == 3 &&
-      matchedLoas.Single(group => group.Name == "3 Section").Entries[0].Name == "M. Sobczak",
-    "LOAs cross-checked and regrouped by current ORBAT");
+var rosterThreads = new List<LoaThread>
+{
+    new("1 Section", "C. Morgan", "https://unit.invalid/thread-201.html"),
+    new("2 Section", "A. Foica", "https://unit.invalid/thread-202.html"),
+    new("2 Section", "B. Lucas", "https://unit.invalid/thread-203.html"),
+};
+var rosterStatus = ForumLoaService.BuildRosterStatus(
+    loaPosts, rosterThreads, loaOrbat, new DateTime(2026, 9, 26));
+Check(rosterStatus.SelectMany(group => group.Members).Count() == 5 &&
+      rosterStatus.Sum(group => group.LoaCount) == 3 &&
+      !rosterStatus.Single(group => group.Name == "2 Section").Members[1].IsLoa &&
+      rosterStatus.Single(group => group.Name == "HQ").Members[0].StatusLabel == "No thread",
+    "full ORBAT roster reports LOA and attending states");
+var missingThreadMember = rosterStatus.Single(group => group.Name == "3 Section").Members[0];
+Check(missingThreadMember.Name == "M. Sobczak" && missingThreadMember.IsLoa &&
+      missingThreadMember.MissingThread,
+    "missing personal LOA thread is reported independently of attendance state");
 
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
@@ -290,7 +307,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (39 checks).");
+Console.WriteLine("Automated tests passed (41 checks).");
 return 0;
 
 void Check(bool condition, string name)
