@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using FourthIBTracker.Models;
 using FourthIBTracker.Services;
+using FourthIBTracker.ViewModels;
 
 var failures = new List<string>();
 
@@ -117,6 +118,12 @@ Check(AttendanceStatus.Present.ToColor().ToString() == "#FF6AA84F" &&
       AttendanceStatus.Loa.ToColor().ToString() == "#FF3C78D8" &&
       AttendanceStatus.Awol.ToColor().ToString() == "#FFFF0000",
     "editable attendance uses website attendance colours");
+
+Check(AddressViewModel.DefaultReportingMonth(new DateTime(2026, 10, 1)) ==
+      new DateTime(2026, 9, 1),
+    "Sergeant's Address defaults to the previous reporting month");
+Check(new AddressMonthOption(new DateTime(2026, 9, 1)).Label == "September 2026",
+    "Sergeant's Address month selector label");
 
 var platoonForum = """
     <a href="forum-24.html">1 Platoon, HQ</a>
@@ -335,7 +342,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (43 checks).");
+Console.WriteLine("Automated tests passed (45 checks).");
 return 0;
 
 void Check(bool condition, string name)

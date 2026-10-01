@@ -1,4 +1,5 @@
 using System.IO;
+using System.Collections.ObjectModel;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
@@ -18,6 +19,12 @@ public class MonthStats
     public List<string> HundredPercenters { get; set; } = new();
 }
 
+public sealed record AddressMonthOption(DateTime Month)
+{
+    public string Label => Month.ToString("MMMM yyyy");
+    public override string ToString() => Label;
+}
+
 /// <summary>
 /// Builds the monthly "Sergeant's Address" Discord post from the live
 /// attendance sheet. Each generation saves a snapshot so next month's post
@@ -33,6 +40,9 @@ public partial class AddressViewModel : ObservableObject
     [ObservableProperty] private string generatedText = "";
     [ObservableProperty] private string extraNotes = "";
     [ObservableProperty] private string statusMessage = "";
+    [ObservableProperty] private AddressMonthOption? selectedReportingMonth;
+
+    public ObservableCollection<AddressMonthOption> ReportingMonths { get; } = new();
 
     private MonthStats? _current;
     private MonthStats? _previous;
@@ -44,7 +54,21 @@ public partial class AddressViewModel : ObservableObject
         "4thIBTracker", "address-history.json");
 
     public AddressViewModel(GoogleSheetsService sheets, AppConfig config)
-    { _sheets = sheets; _config = config; }
+    {
+        _sheets = sheets;
+        _config = config;
+
+        var currentMonth = MonthStart(DateTime.Today);
+        for (var offset = 0; offset < 24; offset++)
+            ReportingMonths.Add(new AddressMonthOption(currentMonth.AddMonths(-offset)));
+        selectedReportingMonth = ReportingMonths.First(option =>
+            option.Month == DefaultReportingMonth(DateTime.Today));
+    }
+
+    internal static DateTime DefaultReportingMonth(DateTime today) =>
+        MonthStart(today).AddMonths(-1);
+
+    private static DateTime MonthStart(DateTime date) => new(date.Year, date.Month, 1);
 
     [RelayCommand]
     public async Task LoadAsync()
@@ -94,11 +118,14 @@ public partial class AddressViewModel : ObservableObject
                 }
             }
 
+            var reportingMonth = SelectedReportingMonth?.Month ??
+                                 DefaultReportingMonth(DateTime.Today);
             _current = stats;
-            _previous = LoadSnapshot(DateTime.Today.AddMonths(-1));
-            SaveSnapshot(DateTime.Today, stats);
+            _previous = LoadSnapshot(reportingMonth.AddMonths(-1));
+            SaveSnapshot(reportingMonth, stats);
             Regenerate();
-            StatusMessage = $"Stats pulled {DateTime.Now:HH:mm}. Edit the text below, then copy.";
+            StatusMessage = $"Stats pulled for {reportingMonth:MMMM yyyy} at " +
+                            $"{DateTime.Now:HH:mm}. Edit the text below, then copy.";
         }
         catch (Exception ex) { Error = ex.Message; }
         finally { IsLoading = false; }
@@ -106,12 +133,24 @@ public partial class AddressViewModel : ObservableObject
 
     partial void OnExtraNotesChanged(string value) => Regenerate();
 
+    partial void OnSelectedReportingMonthChanged(AddressMonthOption? value)
+    {
+        if (value is null) return;
+        _previous = LoadSnapshot(value.Month.AddMonths(-1));
+        Regenerate();
+        if (_current != null)
+            StatusMessage = $"Reporting month changed to {value.Label}. " +
+                            "Refresh if the attendance sheet data has also changed.";
+    }
+
     [RelayCommand]
     private void Regenerate()
     {
         if (_current == null) return;
-        var month = DateTime.Today.ToString("MMMM");
-        var prevMonth = DateTime.Today.AddMonths(-1).ToString("MMMM");
+        var reportingMonth = SelectedReportingMonth?.Month ??
+                             DefaultReportingMonth(DateTime.Today);
+        var month = reportingMonth.ToString("MMMM");
+        var prevMonth = reportingMonth.AddMonths(-1).ToString("MMMM");
         int n = _config.Platoon.Number;
         var sb = new StringBuilder();
 
