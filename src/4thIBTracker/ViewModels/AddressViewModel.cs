@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -21,7 +22,7 @@ public class MonthStats
 }
 
 internal sealed record AttendanceMonthTable(
-    IReadOnlyDictionary<int, MonthStats> Months,
+    IReadOnlyDictionary<DateTime, MonthStats> Months,
     MonthStats? Placeholders);
 
 public sealed record AddressMonthOption(DateTime Month)
@@ -53,7 +54,7 @@ public partial class AddressViewModel : ObservableObject
     private MonthStats? _previous;
     private MonthStats? _liveStats;
     private AttendanceMonthTable _sheetMonthTable = new(
-        new Dictionary<int, MonthStats>(), null);
+        new Dictionary<DateTime, MonthStats>(), null);
 
     public bool HasData => _current != null;
 
@@ -119,7 +120,8 @@ public partial class AddressViewModel : ObservableObject
             }
 
             _liveStats = stats;
-            _sheetMonthTable = ParseMonthlyAttendanceTable(rows);
+            _sheetMonthTable = ParseMonthlyAttendanceTable(
+                rows, DefaultReportingMonth(DateTime.Today).Year);
             ApplySelectedMonth();
         }
         catch (Exception ex) { Error = ex.Message; }
@@ -141,27 +143,26 @@ public partial class AddressViewModel : ObservableObject
         var reportingMonth = SelectedReportingMonth?.Month ??
                              DefaultReportingMonth(DateTime.Today);
         var defaultMonth = DefaultReportingMonth(DateTime.Today);
-        var tableYear = defaultMonth.Year;
         var source = "saved local history";
 
-        if (reportingMonth.Year == tableYear &&
-            _sheetMonthTable.Months.TryGetValue(reportingMonth.Month, out var monthStats))
+        if (_sheetMonthTable.Months.TryGetValue(reportingMonth, out var monthStats))
         {
             _current = monthStats;
-            source = $"the {reportingMonth:MMMM} row";
+            source = $"the {reportingMonth:MMMM yyyy} row";
         }
         else if (reportingMonth == defaultMonth)
         {
             _current = _sheetMonthTable.Placeholders ?? _liveStats;
             source = "the live Placeholders row";
         }
-        else if (reportingMonth.Year == tableYear)
+        else if (_sheetMonthTable.Months.Keys.Any(month =>
+                     month.Year == reportingMonth.Year))
         {
-            // Never reuse a local snapshot for a blank row in the current sheet year.
+            // Never reuse a local snapshot for a blank row in a year held by the sheet.
             // Older builds could save the live figures under whichever month happened
             // to be selected, which is the bug this lookup replaces.
             _current = null;
-            source = $"the blank {reportingMonth:MMMM} row";
+            source = $"the blank {reportingMonth:MMMM yyyy} row";
         }
         else
         {
@@ -169,8 +170,8 @@ public partial class AddressViewModel : ObservableObject
         }
 
         var previousMonth = reportingMonth.AddMonths(-1);
-        if (previousMonth.Year == tableYear)
-            _previous = _sheetMonthTable.Months.TryGetValue(previousMonth.Month, out var previous)
+        if (_sheetMonthTable.Months.Keys.Any(month => month.Year == previousMonth.Year))
+            _previous = _sheetMonthTable.Months.TryGetValue(previousMonth, out var previous)
                 ? previous
                 : null;
         else
@@ -191,7 +192,7 @@ public partial class AddressViewModel : ObservableObject
     }
 
     internal static AttendanceMonthTable ParseMonthlyAttendanceTable(
-        IList<IList<object>> rows)
+        IList<IList<object>> rows, int currentYear)
     {
         static string Cell(IList<object> row, int col) =>
             col >= 0 && col < row.Count ? row[col]?.ToString()?.Trim() ?? "" : "";
@@ -224,13 +225,23 @@ public partial class AddressViewModel : ObservableObject
                 continue;
 
             headers.TryGetValue("100ers", out var hundredCol);
-            var months = new Dictionary<int, MonthStats>();
+            var months = new Dictionary<DateTime, MonthStats>();
             MonthStats? placeholders = null;
+            var activeYear = currentYear;
 
             for (var rowIndex = headerRow + 1; rowIndex < rows.Count; rowIndex++)
             {
                 var row = rows[rowIndex];
                 var label = Cell(row, monthCol);
+
+                var yearMatch = Regex.Match(label, @"\b(20\d{2})\b");
+                if (yearMatch.Success &&
+                    int.TryParse(yearMatch.Groups[1].Value, out var historicalYear))
+                {
+                    activeYear = historicalYear;
+                    continue;
+                }
+
                 if (!label.Equals("Placeholders", StringComparison.OrdinalIgnoreCase) &&
                     !monthNames.TryGetValue(label, out _))
                     continue;
@@ -258,13 +269,13 @@ public partial class AddressViewModel : ObservableObject
                 if (label.Equals("Placeholders", StringComparison.OrdinalIgnoreCase))
                     placeholders = stats;
                 else
-                    months[monthNames[label]] = stats;
+                    months[new DateTime(activeYear, monthNames[label], 1)] = stats;
             }
 
             return new AttendanceMonthTable(months, placeholders);
         }
 
-        return new AttendanceMonthTable(new Dictionary<int, MonthStats>(), null);
+        return new AttendanceMonthTable(new Dictionary<DateTime, MonthStats>(), null);
     }
 
     private static int? ParsePercentage(string value)

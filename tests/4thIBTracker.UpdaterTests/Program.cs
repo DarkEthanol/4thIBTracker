@@ -6,6 +6,7 @@ using FourthIBTracker.Services;
 using FourthIBTracker.ViewModels;
 
 var failures = new List<string>();
+var checksRun = 0;
 
 Check(UpdateService.TryParseReleaseVersion("v1.2.3", out var parsed) &&
       parsed == new Version(1, 2, 3), "stable version parsing");
@@ -146,18 +147,47 @@ var addressMonthRows = new List<IList<object>>
     {
         "September", "", "", "", "", "", "", "", "", "", "", "",
     },
+    new List<object>
+    {
+        "1 Platoon Attendance Figures 2025 (Hidden Below)", "", "", "", "", "", "", "",
+        "", "", "", "",
+    },
+    new List<object>
+    {
+        "August", "", "82%", "", "100%", "88%", "78%", "60%", "", "", "",
+        "Pte. Historical Member",
+    },
+    new List<object>
+    {
+        "September", "", "88%", "", "100%", "89%", "83%", "80%", "", "", "",
+        "Pte. Former Member",
+    },
+    new List<object>
+    {
+        "1 Platoon Attendance Figures 2021 (Hidden Below)", "", "", "", "", "", "", "",
+        "", "", "", "",
+    },
+    new List<object>
+    {
+        "September", "", "65%", "", "63%", "53%", "81%", "63%", "", "", "",
+        "Pte. Very Old Member",
+    },
 };
-var addressMonthTable = AddressViewModel.ParseMonthlyAttendanceTable(addressMonthRows);
-Check(addressMonthTable.Months.TryGetValue(8, out var augustStats) &&
+var addressMonthTable = AddressViewModel.ParseMonthlyAttendanceTable(addressMonthRows, 2026);
+Check(addressMonthTable.Months.TryGetValue(new DateTime(2026, 8, 1), out var augustStats) &&
       augustStats.Overall == 79 && augustStats.Hq == 75 && augustStats.S1 == 72 &&
       augustStats.S2 == 75 && augustStats.S3 == 95,
     "Sergeant's Address reads the selected month row");
 Check(augustStats?.HundredPercenters.SequenceEqual(
           ["Cpl. C. Morgan", "LCpl. M. Eshers"]) == true,
     "Sergeant's Address reads monthly 100% attendees");
-Check(!addressMonthTable.Months.ContainsKey(9) &&
+Check(!addressMonthTable.Months.ContainsKey(new DateTime(2026, 9, 1)) &&
       addressMonthTable.Placeholders?.Overall == 75,
     "blank month row remains distinct from live placeholder figures");
+Check(addressMonthTable.Months[new DateTime(2025, 9, 1)].Overall == 88 &&
+      addressMonthTable.Months[new DateTime(2021, 9, 1)].Overall == 65 &&
+      addressMonthTable.Months[new DateTime(2026, 8, 1)].Overall == 79,
+    "same month names remain isolated by attendance year");
 
 var platoonForum = """
     <a href="forum-24.html">1 Platoon, HQ</a>
@@ -376,11 +406,12 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Automated tests passed (45 checks).");
+Console.WriteLine($"Automated tests passed ({checksRun} checks).");
 return 0;
 
 void Check(bool condition, string name)
 {
+    checksRun++;
     if (!condition) failures.Add(name);
 }
 
