@@ -125,6 +125,40 @@ Check(AddressViewModel.DefaultReportingMonth(new DateTime(2026, 10, 1)) ==
 Check(new AddressMonthOption(new DateTime(2026, 9, 1)).Label == "September 2026",
     "Sergeant's Address month selector label");
 
+var addressMonthRows = new List<IList<object>>
+{
+    new List<object>
+    {
+        "Month", "Link", "Platoon Average", "", "HQ", "1 Section", "2 Section",
+        "3 Section", "LOA's", "AWOL's", "Late", "100%ers",
+    },
+    new List<object>
+    {
+        "Placeholders", "", "75%", "", "75%", "75%", "75%", "75%", "20", "1", "1",
+        "LCpl. M. Eshers, Cpl. H. Bem",
+    },
+    new List<object>
+    {
+        "August", "", "79%", "", "75%", "72%", "75%", "95%", "19", "1", "0",
+        "Cpl. C. Morgan, LCpl. M. Eshers",
+    },
+    new List<object>
+    {
+        "September", "", "", "", "", "", "", "", "", "", "", "",
+    },
+};
+var addressMonthTable = AddressViewModel.ParseMonthlyAttendanceTable(addressMonthRows);
+Check(addressMonthTable.Months.TryGetValue(8, out var augustStats) &&
+      augustStats.Overall == 79 && augustStats.Hq == 75 && augustStats.S1 == 72 &&
+      augustStats.S2 == 75 && augustStats.S3 == 95,
+    "Sergeant's Address reads the selected month row");
+Check(augustStats?.HundredPercenters.SequenceEqual(
+          ["Cpl. C. Morgan", "LCpl. M. Eshers"]) == true,
+    "Sergeant's Address reads monthly 100% attendees");
+Check(!addressMonthTable.Months.ContainsKey(9) &&
+      addressMonthTable.Placeholders?.Overall == 75,
+    "blank month row remains distinct from live placeholder figures");
+
 var platoonForum = """
     <a href="forum-24.html">1 Platoon, HQ</a>
     <span>Sub Forums:</span> <a href="forum-801.html">LOA</a>

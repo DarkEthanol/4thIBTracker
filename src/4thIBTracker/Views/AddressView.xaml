@@ -13,7 +13,7 @@
                           SelectedItem="{Binding SelectedReportingMonth, Mode=TwoWay}"
                           DisplayMemberPath="Label" Width="155" Height="31"
                           VerticalContentAlignment="Center" Margin="0,0,8,0"
-                          ToolTip="Controls the month used in the post and its saved comparison history"/>
+                          ToolTip="Loads the selected month from the attendance sheet's monthly history table"/>
                 <Button Content="📋 Copy for Discord" Padding="14,5" FontWeight="SemiBold"
                         Command="{Binding CopyCommand}" Margin="0,0,8,0"/>
                 <Button Content="↻ Refresh stats" Padding="10,5" Command="{Binding LoadCommand}"/>

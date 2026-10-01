@@ -1,5 +1,6 @@
 using System.IO;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
@@ -18,6 +19,10 @@ public class MonthStats
     public int? S3 { get; set; }
     public List<string> HundredPercenters { get; set; } = new();
 }
+
+internal sealed record AttendanceMonthTable(
+    IReadOnlyDictionary<int, MonthStats> Months,
+    MonthStats? Placeholders);
 
 public sealed record AddressMonthOption(DateTime Month)
 {
@@ -46,6 +51,9 @@ public partial class AddressViewModel : ObservableObject
 
     private MonthStats? _current;
     private MonthStats? _previous;
+    private MonthStats? _liveStats;
+    private AttendanceMonthTable _sheetMonthTable = new(
+        new Dictionary<int, MonthStats>(), null);
 
     public bool HasData => _current != null;
 
@@ -78,7 +86,7 @@ public partial class AddressViewModel : ObservableObject
         {
             var att = _config.Sheet("Attendance");
             var rows = await _sheets.ReadValuesFromConfiguredTabAsync(
-                att.Id, att.Tab, "A1:X30");
+                att.Id, att.Tab, "A1:Z150");
 
             string Cell(int row1, int col0)
             {
@@ -88,21 +96,13 @@ public partial class AddressViewModel : ObservableObject
                 return col0 < row.Count ? row[col0]?.ToString()?.Trim() ?? "" : "";
             }
 
-            static int? Pct(string s)
-            {
-                s = s.Replace("%", "").Trim();
-                if (double.TryParse(s, out var d))
-                    return (int)Math.Round(d <= 1 && d > 0 ? d * 100 : d);
-                return null;
-            }
-
             var stats = new MonthStats
             {
-                Hq = Pct(Cell(6, 15)),       // HQ average
-                S1 = Pct(Cell(23, 7)),       // 1 Section average
-                S2 = Pct(Cell(23, 15)),      // 2 Section average
-                S3 = Pct(Cell(23, 23)),      // 3 Section average
-                Overall = Pct(Cell(25, 15)), // platoon overall
+                Hq = ParsePercentage(Cell(6, 15)),       // HQ average
+                S1 = ParsePercentage(Cell(23, 7)),       // 1 Section average
+                S2 = ParsePercentage(Cell(23, 15)),      // 2 Section average
+                S3 = ParsePercentage(Cell(23, 23)),      // 3 Section average
+                Overall = ParsePercentage(Cell(25, 15)), // platoon overall
             };
 
             // 100%ers: every soldier whose % cell reads 100.
@@ -113,19 +113,14 @@ public partial class AddressViewModel : ObservableObject
                 {
                     var name = Cell(row1, block.NameCol0);
                     if (name.Length == 0 || name.StartsWith("Total")) continue;
-                    if (Pct(Cell(row1, pctCol)) == 100)
+                    if (ParsePercentage(Cell(row1, pctCol)) == 100)
                         stats.HundredPercenters.Add(name);
                 }
             }
 
-            var reportingMonth = SelectedReportingMonth?.Month ??
-                                 DefaultReportingMonth(DateTime.Today);
-            _current = stats;
-            _previous = LoadSnapshot(reportingMonth.AddMonths(-1));
-            SaveSnapshot(reportingMonth, stats);
-            Regenerate();
-            StatusMessage = $"Stats pulled for {reportingMonth:MMMM yyyy} at " +
-                            $"{DateTime.Now:HH:mm}. Edit the text below, then copy.";
+            _liveStats = stats;
+            _sheetMonthTable = ParseMonthlyAttendanceTable(rows);
+            ApplySelectedMonth();
         }
         catch (Exception ex) { Error = ex.Message; }
         finally { IsLoading = false; }
@@ -136,11 +131,148 @@ public partial class AddressViewModel : ObservableObject
     partial void OnSelectedReportingMonthChanged(AddressMonthOption? value)
     {
         if (value is null) return;
-        _previous = LoadSnapshot(value.Month.AddMonths(-1));
+        ApplySelectedMonth();
+    }
+
+    private void ApplySelectedMonth()
+    {
+        if (_liveStats == null) return;
+
+        var reportingMonth = SelectedReportingMonth?.Month ??
+                             DefaultReportingMonth(DateTime.Today);
+        var defaultMonth = DefaultReportingMonth(DateTime.Today);
+        var tableYear = defaultMonth.Year;
+        var source = "saved local history";
+
+        if (reportingMonth.Year == tableYear &&
+            _sheetMonthTable.Months.TryGetValue(reportingMonth.Month, out var monthStats))
+        {
+            _current = monthStats;
+            source = $"the {reportingMonth:MMMM} row";
+        }
+        else if (reportingMonth == defaultMonth)
+        {
+            _current = _sheetMonthTable.Placeholders ?? _liveStats;
+            source = "the live Placeholders row";
+        }
+        else if (reportingMonth.Year == tableYear)
+        {
+            // Never reuse a local snapshot for a blank row in the current sheet year.
+            // Older builds could save the live figures under whichever month happened
+            // to be selected, which is the bug this lookup replaces.
+            _current = null;
+            source = $"the blank {reportingMonth:MMMM} row";
+        }
+        else
+        {
+            _current = LoadSnapshot(reportingMonth);
+        }
+
+        var previousMonth = reportingMonth.AddMonths(-1);
+        if (previousMonth.Year == tableYear)
+            _previous = _sheetMonthTable.Months.TryGetValue(previousMonth.Month, out var previous)
+                ? previous
+                : null;
+        else
+            _previous = LoadSnapshot(previousMonth);
+
+        OnPropertyChanged(nameof(HasData));
+        if (_current == null)
+        {
+            GeneratedText = "";
+            StatusMessage = $"No attendance figures are recorded in {source}.";
+            return;
+        }
+
+        SaveSnapshot(reportingMonth, _current);
         Regenerate();
-        if (_current != null)
-            StatusMessage = $"Reporting month changed to {value.Label}. " +
-                            "Refresh if the attendance sheet data has also changed.";
+        StatusMessage = $"Stats for {reportingMonth:MMMM yyyy} loaded from {source} at " +
+                        $"{DateTime.Now:HH:mm}. Edit the text below, then copy.";
+    }
+
+    internal static AttendanceMonthTable ParseMonthlyAttendanceTable(
+        IList<IList<object>> rows)
+    {
+        static string Cell(IList<object> row, int col) =>
+            col >= 0 && col < row.Count ? row[col]?.ToString()?.Trim() ?? "" : "";
+
+        static string HeaderKey(string value) => new(
+            value.Where(char.IsLetterOrDigit)
+                .Select(char.ToLowerInvariant)
+                .ToArray());
+
+        var monthNames = DateTimeFormatInfo.InvariantInfo.MonthNames
+            .Select((name, index) => (Name: name, Month: index + 1))
+            .Where(item => item.Name.Length > 0)
+            .ToDictionary(item => item.Name, item => item.Month,
+                StringComparer.OrdinalIgnoreCase);
+
+        for (var headerRow = 0; headerRow < rows.Count; headerRow++)
+        {
+            var headers = rows[headerRow]
+                .Select((value, col) => (Key: HeaderKey(value?.ToString() ?? ""), Col: col))
+                .Where(item => item.Key.Length > 0)
+                .GroupBy(item => item.Key)
+                .ToDictionary(group => group.Key, group => group.First().Col);
+
+            if (!headers.TryGetValue("month", out var monthCol) ||
+                !headers.TryGetValue("platoonaverage", out var overallCol) ||
+                !headers.TryGetValue("hq", out var hqCol) ||
+                !headers.TryGetValue("1section", out var s1Col) ||
+                !headers.TryGetValue("2section", out var s2Col) ||
+                !headers.TryGetValue("3section", out var s3Col))
+                continue;
+
+            headers.TryGetValue("100ers", out var hundredCol);
+            var months = new Dictionary<int, MonthStats>();
+            MonthStats? placeholders = null;
+
+            for (var rowIndex = headerRow + 1; rowIndex < rows.Count; rowIndex++)
+            {
+                var row = rows[rowIndex];
+                var label = Cell(row, monthCol);
+                if (!label.Equals("Placeholders", StringComparison.OrdinalIgnoreCase) &&
+                    !monthNames.TryGetValue(label, out _))
+                    continue;
+
+                var stats = new MonthStats
+                {
+                    Overall = ParsePercentage(Cell(row, overallCol)),
+                    Hq = ParsePercentage(Cell(row, hqCol)),
+                    S1 = ParsePercentage(Cell(row, s1Col)),
+                    S2 = ParsePercentage(Cell(row, s2Col)),
+                    S3 = ParsePercentage(Cell(row, s3Col)),
+                    HundredPercenters = hundredCol > 0
+                        ? Cell(row, hundredCol)
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries |
+                                        StringSplitOptions.TrimEntries)
+                            .ToList()
+                        : new List<string>(),
+                };
+
+                var hasData = stats.Overall.HasValue || stats.Hq.HasValue ||
+                              stats.S1.HasValue || stats.S2.HasValue ||
+                              stats.S3.HasValue || stats.HundredPercenters.Count > 0;
+                if (!hasData) continue;
+
+                if (label.Equals("Placeholders", StringComparison.OrdinalIgnoreCase))
+                    placeholders = stats;
+                else
+                    months[monthNames[label]] = stats;
+            }
+
+            return new AttendanceMonthTable(months, placeholders);
+        }
+
+        return new AttendanceMonthTable(new Dictionary<int, MonthStats>(), null);
+    }
+
+    private static int? ParsePercentage(string value)
+    {
+        value = value.Replace("%", "").Trim();
+        if (double.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var number))
+            return (int)Math.Round(number <= 1 && number > 0 ? number * 100 : number);
+        return null;
     }
 
     [RelayCommand]
