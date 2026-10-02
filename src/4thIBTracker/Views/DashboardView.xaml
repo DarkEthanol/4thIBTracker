@@ -33,7 +33,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Hidden fetcher for the transfers scan: reuses the app's forum login -->
+        <!-- Hidden fetcher for forum-backed cards: reuses the app's forum login -->
         <wv2:WebView2 x:Name="Fetcher" Grid.Row="0" Width="0" Height="0" Visibility="Hidden"/>
 
         <DockPanel Grid.Row="0">
@@ -132,26 +132,41 @@
                 <Border Grid.Row="1" Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource H2}" Text="{Binding NcoMonthTitle}"/>
+                        <TextBlock Text="{Binding NcoStatus}" FontSize="10.5"
+                                   Foreground="{StaticResource TextDim}" Margin="0,-3,0,3"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding NcoStatus}"/>
                         <ItemsControl ItemsSource="{Binding NcoChecks}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <DockPanel Margin="0,2">
-                                        <TextBlock DockPanel.Dock="Right" FontWeight="Bold" FontSize="13">
+                                    <DockPanel Margin="0,3">
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding StatusText}"
+                                                   FontWeight="Bold" FontSize="12" Margin="8,0,0,0"
+                                                   VerticalAlignment="Center">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
-                                                    <Setter Property="Text" Value="✗ Outstanding"/>
                                                     <Setter Property="Foreground" Value="{StaticResource Danger}"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Done}" Value="True">
-                                                            <Setter Property="Text" Value="✓ Done"/>
+                                                        <DataTrigger Binding="{Binding IsCompleted}" Value="True">
                                                             <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsUpcoming}" Value="True">
+                                                            <Setter Property="Foreground" Value="{StaticResource Warn}"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <TextBlock Text="{Binding Position}" FontWeight="SemiBold" FontSize="13.5"
-                                                   Foreground="{StaticResource TextMain}"/>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" FontSize="13"
+                                                       Foreground="{StaticResource TextMain}">
+                                                <Run Text="{Binding Position, Mode=OneWay}"/>
+                                                <Run Text=" · "/>
+                                                <Run Text="{Binding Section, Mode=OneWay}"/>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding NcoNames}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
                                     </DockPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -295,25 +310,9 @@
 
                 <Border Grid.Row="1" Style="{StaticResource Card}">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top">
-                            <TextBlock Style="{StaticResource H2}" Text="TRANSFERS"/>
-                            <Button DockPanel.Dock="Right" Content="Scan" Padding="12,2"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    Command="{Binding ScanTransfersCommand}"/>
-                        </DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource H2}" Text="TRANSFERS"/>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding TransferStatus}" FontSize="12"
                                    Foreground="{StaticResource TextDim}" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="3" Margin="0,0,0,4">
-                            <ProgressBar.Style>
-                                <Style TargetType="ProgressBar">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsScanningTransfers}" Value="False">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ProgressBar.Style>
-                        </ProgressBar>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel>
                                 <TextBlock Text="PENDING" FontSize="11.5" FontWeight="Bold"

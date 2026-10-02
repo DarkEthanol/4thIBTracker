@@ -9,6 +9,24 @@ using GRequest = Google.Apis.Sheets.v4.Data.Request;
 namespace FourthIBTracker.ViewModels;
 
 // ===================================================================== Dashboard
+public enum DashboardNcoCourseStatus { Completed, Upcoming, NotScheduled }
+
+public sealed record DashboardNcoCourse(
+    string Position,
+    string Section,
+    string NcoNames,
+    DashboardNcoCourseStatus Status)
+{
+    public bool IsCompleted => Status == DashboardNcoCourseStatus.Completed;
+    public bool IsUpcoming => Status == DashboardNcoCourseStatus.Upcoming;
+    public string StatusText => Status switch
+    {
+        DashboardNcoCourseStatus.Completed => "✓ Completed",
+        DashboardNcoCourseStatus.Upcoming => "~ Upcoming",
+        _ => "✗ Not scheduled",
+    };
+}
+
 public partial class DashboardViewModel : ObservableObject
 {
     private readonly GoogleSheetsService _sheets;
@@ -21,16 +39,15 @@ public partial class DashboardViewModel : ObservableObject
     public ObservableCollection<CourseGapItem> CourseGaps { get; } = new();
     public ObservableCollection<SectionRoster> Sections { get; } = new();
     public ObservableCollection<SheetParsers.LogiOrderItem> LogiOrder { get; } = new();
-    public ObservableCollection<SheetParsers.NcoCheck> NcoChecks { get; } = new();
+    public ObservableCollection<DashboardNcoCourse> NcoChecks { get; } = new();
     public ObservableCollection<OrbatWebService.OrbatMismatch> OrbatMismatches { get; } = new();
     public ObservableCollection<TransferItem> PendingTransfers { get; } = new();
     public ObservableCollection<TransferItem> CompletedTransfers { get; } = new();
 
     [ObservableProperty] private bool orbatInSync;
-    [ObservableProperty] private bool isScanningTransfers;
-    [ObservableProperty] private string transferStatus = "Not scanned yet — hit Scan.";
+    [ObservableProperty] private string transferStatus = "Loading with the dashboard…";
 
-    /// <summary>Set by the view: fetches a URL through a hidden WebView2 (forum login reused).</summary>
+    /// <summary>Set by the view: fetches authenticated forum HTML using the shared browser session.</summary>
     public Func<string, Task<string>>? FetchHtml { get; set; }
 
     private HashSet<string> _platoonMembers = new();
@@ -38,6 +55,7 @@ public partial class DashboardViewModel : ObservableObject
     [ObservableProperty] private bool isLoading;
     [ObservableProperty] private string? error;
     [ObservableProperty] private string ncoMonthTitle = "";
+    [ObservableProperty] private string ncoStatus = "";
 
     public DashboardViewModel(GoogleSheetsService sheets, AppConfig config)
     { _sheets = sheets; _config = config; }
@@ -47,9 +65,12 @@ public partial class DashboardViewModel : ObservableObject
     {
         IsLoading = true; Error = null;
         var errors = new List<string>();
+        var sut = _config.Sheet("SutRecord");
+        var sutRowsTask = _sheets.ReadValuesFromConfiguredTabAsync(
+            sut.Id, sut.Tab, "A1:AH120");
 
         // The cards use independent sheets/sites. Start them together so the
-        // dashboard waits for the slowest source rather than the sum of all six.
+        // dashboard waits for the slowest source rather than the sum of every source.
         // Each card still catches its own error, so one failure cannot blank the page.
         var loads = new[]
         {
@@ -112,31 +133,19 @@ public partial class DashboardViewModel : ObservableObject
 
             Load("NCO tracker", async () =>
             {
-                var nco = _config.Sheet("NcoTracker");
-                // Year tab: prefer the current year, fall back to whatever's configured.
-                string tab;
-                try { tab = await _sheets.ResolveTabAsync(nco.Id, DateTime.Today.Year.ToString()); }
-                catch { tab = await _sheets.ResolveTabAsync(nco.Id, nco.Tab); }
-                var rows = await _sheets.ReadValuesAsync(nco.Id, $"'{tab}'!A1:M60");
-                NcoChecks.Clear();
-                foreach (var c in SheetParsers.ParseNcoMonth(rows, NcoPositions, DateTime.Today.Month))
-                    NcoChecks.Add(c);
-                NcoMonthTitle = $"NCO TRACKER — {DateTime.Today:MMMM}".ToUpperInvariant();
+                await LoadNcoCoursesAsync(await sutRowsTask);
             }),
 
             Load("ORBAT sync", async () =>
             {
-                var sut = _config.Sheet("SutRecord");
-
                 // The website does not depend on the sheet metadata/value read,
                 // so let it download while the Google requests are in flight.
                 var webTask = OrbatWebService.FetchPlatoonAsync(
                     _config.OrbatUrl, _config.Platoon.Number);
-                var rowsTask = ReadSheetRowsAsync();
-                await Task.WhenAll(rowsTask, webTask);
+                await Task.WhenAll(sutRowsTask, webTask);
 
                 var sheetSections = SheetParsers.ParsePlatoonSections(
-                    await rowsTask, _config.Platoon.Number);
+                    await sutRowsTask, _config.Platoon.Number);
                 _platoonMembers = sheetSections.SelectMany(kv => kv.Value)
                     .Select(NormName).ToHashSet();
                 var webSections = await webTask;
@@ -145,11 +154,15 @@ public partial class DashboardViewModel : ObservableObject
                 foreach (var m in OrbatWebService.Compare(webSections, sheetSections))
                     OrbatMismatches.Add(m);
                 OrbatInSync = OrbatMismatches.Count == 0;
+            }),
 
-                async Task<IList<IList<object>>> ReadSheetRowsAsync()
+            Load("Transfers", async () =>
+            {
+                try { await LoadTransfersAsync(await sutRowsTask); }
+                catch (Exception ex)
                 {
-                    return await _sheets.ReadValuesFromConfiguredTabAsync(
-                        sut.Id, sut.Tab, "A1:AH120");
+                    TransferStatus = $"Transfers unavailable: {ex.Message}";
+                    throw;
                 }
             }),
         };
@@ -170,7 +183,145 @@ public partial class DashboardViewModel : ObservableObject
         }
     }
 
-    // ---------------- transfers scan (on demand — opens forum thread pages) ----------------
+    // ---------------- NCO course readiness ----------------
+    private async Task LoadNcoCoursesAsync(IList<IList<object>> sutRows)
+    {
+        var today = DateTime.Today;
+        var monthStart = new DateTime(today.Year, today.Month, 1);
+        var nco = _config.Sheet("NcoTracker");
+
+        // Year tab: prefer the current year, fall back to whatever is configured.
+        string tab;
+        try { tab = await _sheets.ResolveTabAsync(nco.Id, today.Year.ToString()); }
+        catch { tab = await _sheets.ResolveTabAsync(nco.Id, nco.Tab); }
+
+        var trackerRows = await _sheets.ReadValuesAsync(nco.Id, $"'{tab}'!A1:M60");
+        var trackerByPosition = SheetParsers.ParseNcoMonth(
+                trackerRows, NcoPositions, today.Month)
+            .ToDictionary(item => item.Position, StringComparer.OrdinalIgnoreCase);
+
+        var platoonSections = SheetParsers.ParsePlatoonSections(
+            sutRows, _config.Platoon.Number);
+        string[] sectionOrder = ["1 Section", "2 Section", "3 Section"];
+
+        List<ForumThread> completed = [];
+        List<ForumThread> upcoming = [];
+        string forumStatus;
+        if (FetchHtml is null)
+        {
+            forumStatus = "course forums unavailable";
+        }
+        else
+        {
+            try
+            {
+                var completedTask = ScanNcoCourseForumAsync(
+                    _config.Forum.CoursesForumUrl,
+                    Math.Max(1, _config.Forum.MaxPages),
+                    thread => thread.Date is null ||
+                              (thread.Date.Value.Year == today.Year &&
+                               thread.Date.Value.Month == today.Month),
+                    monthStart);
+                var upcomingTask = ScanNcoCourseForumAsync(
+                    _config.Forum.UpcomingForumUrl,
+                    Math.Min(3, Math.Max(1, _config.Forum.MaxPages)),
+                    thread => thread.Date is null || thread.Date.Value.Date >= monthStart,
+                    stopBefore: null);
+                await Task.WhenAll(completedTask, upcomingTask);
+                completed = await completedTask;
+                upcoming = await upcomingTask;
+                forumStatus = "sheet + course forums";
+            }
+            catch (Exception ex)
+            {
+                // The sheet remains useful when the website is logged out or down.
+                forumStatus = $"sheet loaded; forum schedule unavailable: {ex.Message}";
+            }
+        }
+
+        NcoChecks.Clear();
+        var positions = NcoPositions.ToList();
+        for (var index = 0; index < positions.Count; index++)
+        {
+            var position = positions[index];
+            var section = index < sectionOrder.Length ? sectionOrder[index] : "Section";
+            var names = platoonSections.TryGetValue(section, out var members)
+                ? members.Take(2).ToList()
+                : [];
+            var sheetDone = trackerByPosition.TryGetValue(position, out var check) && check.Done;
+            var forumCompleted = completed.Any(thread => AuthorMatches(thread.Author, names));
+            var forumUpcoming = upcoming.Any(thread => AuthorMatches(thread.Author, names));
+            var status = ResolveNcoCourseStatus(sheetDone, forumCompleted, forumUpcoming);
+
+            NcoChecks.Add(new DashboardNcoCourse(
+                position,
+                section,
+                names.Count > 0 ? string.Join(" · ", names) : "IC / 2IC not found",
+                status));
+        }
+
+        NcoMonthTitle = $"NCO COURSES — {today:MMMM}".ToUpperInvariant();
+        NcoStatus = $"{forumStatus} · refreshed {DateTime.Now:HH:mm}";
+    }
+
+    internal static DashboardNcoCourseStatus ResolveNcoCourseStatus(
+        bool sheetDone, bool forumCompleted, bool forumUpcoming) =>
+        sheetDone || forumCompleted
+            ? DashboardNcoCourseStatus.Completed
+            : forumUpcoming
+                ? DashboardNcoCourseStatus.Upcoming
+                : DashboardNcoCourseStatus.NotScheduled;
+
+    private static bool AuthorMatches(string author, IEnumerable<string> names) =>
+        !string.IsNullOrWhiteSpace(author) && names.Any(name =>
+            author.Contains(name, StringComparison.OrdinalIgnoreCase) ||
+            name.Contains(author, StringComparison.OrdinalIgnoreCase) ||
+            author.Replace(".", "").Contains(
+                name.Replace(".", ""), StringComparison.OrdinalIgnoreCase));
+
+    private async Task<List<ForumThread>> ScanNcoCourseForumAsync(
+        string baseUrl, int maxPages, Func<ForumThread, bool> filter, DateTime? stopBefore)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl) ||
+            baseUrl.Contains("PASTE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("NCO course forum URL is not configured.");
+
+        var results = new List<ForumThread>();
+        var seen = new HashSet<string>();
+        var passedCutoff = false;
+
+        for (var page = 1; page <= maxPages; page++)
+        {
+            var html = await FetchHtml!(ForumCoursesService.PageUrl(baseUrl, page));
+            if (page == 1 && ForumCoursesService.LooksLoggedOut(html))
+                throw new InvalidOperationException("log into the 4thIB website to read course dates");
+
+            var threads = ForumCoursesService.ParseThreads(html, baseUrl);
+            if (threads.Count == 0)
+            {
+                if (page == 1)
+                    throw new InvalidOperationException("no course threads were recognised");
+                break;
+            }
+
+            foreach (var thread in threads)
+                if (seen.Add(thread.Url) && filter(thread)) results.Add(thread);
+
+            if (stopBefore is not null)
+            {
+                var dated = threads.Where(thread => thread.Date is not null).ToList();
+                if (dated.Count > 0 && dated.All(thread => thread.Date < stopBefore))
+                {
+                    if (passedCutoff) break;
+                    passedCutoff = true;
+                }
+            }
+        }
+
+        return results;
+    }
+
+    // ---------------- transfers (loaded as a normal dashboard module) ----------------
     private static string NormName(string n) =>
         System.Text.RegularExpressions.Regex.Replace(n, @"\s+", " ").Trim().ToLowerInvariant();
 
@@ -221,43 +372,39 @@ public partial class DashboardViewModel : ObservableObject
         return null;
     }
 
-    [RelayCommand]
-    public async Task ScanTransfersAsync()
+    private async Task LoadTransfersAsync(IList<IList<object>> sutRows)
     {
-        if (FetchHtml == null || IsScanningTransfers) return;
-        IsScanningTransfers = true;
-        try
+        if (FetchHtml is null)
         {
-            if (_platoonMembers.Count == 0)
-            {
-                var sut = _config.Sheet("SutRecord");
-                var rows = await _sheets.ReadValuesFromConfiguredTabAsync(
-                    sut.Id, sut.Tab, "A1:AH120");
-                _platoonMembers = SheetParsers.ParsePlatoonSections(rows, _config.Platoon.Number)
-                    .SelectMany(kv => kv.Value).Select(NormName).ToHashSet();
-            }
-
-            PendingTransfers.Clear();
-            foreach (var t in await ScanForumsAsync(_config.Forum.PendingTransferForums, "pending"))
-                PendingTransfers.Add(t);
-
-            CompletedTransfers.Clear();
-            foreach (var t in await ScanForumsAsync(_config.Forum.CompletedTransferForums, "completed"))
-                CompletedTransfers.Add(t);
-
-            TransferStatus = $"Scanned {DateTime.Now:HH:mm} — " +
-                             $"{PendingTransfers.Count} pending, {CompletedTransfers.Count} completed.";
+            TransferStatus = "Forum module unavailable.";
+            return;
         }
-        catch (Exception ex) { TransferStatus = $"Scan failed: {ex.Message}"; }
-        finally { IsScanningTransfers = false; }
+
+        _platoonMembers = SheetParsers.ParsePlatoonSections(
+                sutRows, _config.Platoon.Number)
+            .SelectMany(kv => kv.Value)
+            .Select(NormName)
+            .ToHashSet();
+
+        TransferStatus = "Loading transfers…";
+        var pendingTask = ScanForumsAsync(_config.Forum.PendingTransferForums);
+        var completedTask = ScanForumsAsync(_config.Forum.CompletedTransferForums);
+        await Task.WhenAll(pendingTask, completedTask);
+
+        PendingTransfers.Clear();
+        foreach (var transfer in await pendingTask) PendingTransfers.Add(transfer);
+        CompletedTransfers.Clear();
+        foreach (var transfer in await completedTask) CompletedTransfers.Add(transfer);
+
+        TransferStatus = $"Updated {DateTime.Now:HH:mm} · " +
+                         $"{PendingTransfers.Count} pending, {CompletedTransfers.Count} completed";
     }
 
-    private async Task<List<TransferItem>> ScanForumsAsync(IEnumerable<string> forumUrls, string label)
+    private async Task<List<TransferItem>> ScanForumsAsync(IEnumerable<string> forumUrls)
     {
         var found = new List<TransferItem>();
         foreach (var url in forumUrls)
         {
-            TransferStatus = $"Scanning {label} — {url[(url.LastIndexOf('/') + 1)..]}…";
             var html = await FetchHtml!(url);
             var threads = ForumCoursesService.ParseThreads(html, url).Take(10).ToList();
 

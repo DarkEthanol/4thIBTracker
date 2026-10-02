@@ -44,6 +44,28 @@ Check(platoonSettings.ExcludesOutstandingCourse("Advanced MG"),
 Check(!platoonSettings.ExcludesOutstandingCourse("SERE Advanced"),
     "outstanding-course exclusion requires an exact name");
 
+Check(DashboardViewModel.ResolveNcoCourseStatus(
+          sheetDone: true, forumCompleted: false, forumUpcoming: true) ==
+      DashboardNcoCourseStatus.Completed &&
+      DashboardViewModel.ResolveNcoCourseStatus(
+          sheetDone: false, forumCompleted: true, forumUpcoming: true) ==
+      DashboardNcoCourseStatus.Completed,
+    "NCO completion takes precedence over an upcoming course");
+Check(DashboardViewModel.ResolveNcoCourseStatus(
+          sheetDone: false, forumCompleted: false, forumUpcoming: true) ==
+      DashboardNcoCourseStatus.Upcoming &&
+      DashboardViewModel.ResolveNcoCourseStatus(
+          sheetDone: false, forumCompleted: false, forumUpcoming: false) ==
+      DashboardNcoCourseStatus.NotScheduled,
+    "NCO upcoming and unscheduled states");
+Check(new DashboardNcoCourse("1-1-C", "1 Section", "C. Example",
+          DashboardNcoCourseStatus.Completed).StatusText == "✓ Completed" &&
+      new DashboardNcoCourse("1-1-E", "2 Section", "D. Example",
+          DashboardNcoCourseStatus.Upcoming).StatusText == "~ Upcoming" &&
+      new DashboardNcoCourse("1-1-G", "3 Section", "E. Example",
+          DashboardNcoCourseStatus.NotScheduled).StatusText == "✗ Not scheduled",
+    "NCO dashboard status labels");
+
 var attendanceIndex = """
     <a href="attendance.php?section=900">Battalion / 1 Platoon</a>
     <a href='attendance.php?section=901'>Battalion / 1 Platoon / 1 Section</a>
