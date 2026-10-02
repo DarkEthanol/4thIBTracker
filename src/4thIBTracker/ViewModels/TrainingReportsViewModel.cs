@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -6,9 +8,19 @@ using FourthIBTracker.Services;
 
 namespace FourthIBTracker.ViewModels;
 
+public sealed record TrainingReportMonth(DateTime Month, List<PatrolNight> Nights)
+{
+    public string Label => Month.ToString("MMMM yyyy");
+    public int ReportCount => Nights.Sum(night => night.SubmittedCount + night.Extras.Count);
+    public string Summary => $"{Nights.Count} PDT date(s) · {ReportCount} report(s)";
+    public override string ToString() => Label;
+}
+
 /// <summary>
 /// Scans the unit-wide Training Reports archive and presents only the configured
-/// platoon's PDT reports in the same section layout as Patrol Reports.
+/// platoon's PDT reports, grouped by month and training date. The parsed archive
+/// is cached per platoon so repeat visits are instant and later refreshes only
+/// need to scan the newest forum pages.
 /// </summary>
 public partial class TrainingReportsViewModel : ObservableObject
 {
@@ -19,6 +31,14 @@ public partial class TrainingReportsViewModel : ObservableObject
     private readonly AppConfig _config;
     private readonly Regex _platoonTitleRx;
     private readonly Regex _subunitRx;
+    private List<ForumThread> _cachedReports = new();
+
+    private sealed class TrainingReportsCache
+    {
+        public string ForumUrl { get; set; } = "";
+        public DateTime SavedUtc { get; set; }
+        public List<ForumThread> Reports { get; set; } = new();
+    }
 
     /// <summary>Set by the view, using the app's authenticated forum session.</summary>
     public Func<string, Task<string>>? FetchHtml { get; set; }
@@ -26,13 +46,24 @@ public partial class TrainingReportsViewModel : ObservableObject
     /// <summary>Set by the view for concurrent archive-page downloads.</summary>
     public Func<IReadOnlyList<string>, Task<IReadOnlyList<string>>>? FetchHtmlBatch { get; set; }
 
-    public ObservableCollection<PatrolNight> Nights { get; } = new();
+    public ObservableCollection<TrainingReportMonth> Months { get; } = new();
 
-    [ObservableProperty] private bool isLoading;
+    [ObservableProperty] private TrainingReportMonth? selectedMonth;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ScanCommand))]
+    private bool isLoading;
+
     [ObservableProperty] private string? error;
-    [ObservableProperty] private string statusMessage = "Open this page to scan the Training Reports archive.";
+    [ObservableProperty] private string statusMessage =
+        "Open this page to scan the Training Reports archive.";
 
     public bool HasScanned { get; private set; }
+    public bool HasData => SelectedMonth != null;
+
+    private string CachePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "4thIBTracker", $"training-reports-{_config.Platoon.Number}.json");
 
     public TrainingReportsViewModel(AppConfig config)
     {
@@ -43,9 +74,12 @@ public partial class TrainingReportsViewModel : ObservableObject
         _subunitRx = new Regex(
             platoonName + @"\s*(?:,|-)?\s*(?:(?<hq>HQ)\b|(?<n>[123])\s*(?:Section|Sec)\b)",
             RegexOptions.IgnoreCase);
+        LoadCache();
     }
 
-    [RelayCommand]
+    private bool CanScan() => !IsLoading;
+
+    [RelayCommand(CanExecute = nameof(CanScan))]
     public async Task ScanAsync()
     {
         if (FetchHtml is null || IsLoading) return;
@@ -61,7 +95,18 @@ public partial class TrainingReportsViewModel : ObservableObject
         Error = null;
         try
         {
-            StatusMessage = "Opening the Training Reports archive…";
+            var knownAtStart = _cachedReports
+                .Select(report => report.Url)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var reportsByUrl = _cachedReports.ToDictionary(
+                report => report.Url, StringComparer.OrdinalIgnoreCase);
+            var incremental = reportsByUrl.Count > 0;
+            var encounteredCachedReport = false;
+            var pagesScanned = 0;
+
+            StatusMessage = incremental
+                ? "Checking the newest Training Reports pages…"
+                : "Opening the Training Reports archive…";
             var firstHtml = await FetchHtml(forumUrl);
             if (ForumCoursesService.LooksLoggedOut(firstHtml))
             {
@@ -71,51 +116,71 @@ public partial class TrainingReportsViewModel : ObservableObject
             }
 
             var lastPage = ForumCoursesService.LastPage(firstHtml, forumUrl);
-            var matching = new List<ForumThread>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (KeepMatching(firstHtml) == 0)
                 throw new InvalidOperationException(
                     "No training-report threads were recognised on archive page 1. " +
                     "The forum layout may have changed.");
+            pagesScanned = 1;
 
-            // The archive currently contains dozens of pages. Download bounded
-            // batches through the cookie-backed HTTP path used by Patrol Reports;
-            // the view retains its sequential WebView fallback for compatibility.
-            const int pageBatchSize = 12;
-            for (var firstPage = 2; firstPage <= lastPage; firstPage += pageBatchSize)
+            // A cached report means every following page is older. Parse the
+            // complete page first, then stop before downloading the old archive.
+            // Even when page 1 already contains a cached report, check the
+            // first four pages. This tolerates an older thread being bumped by
+            // a reply without allowing it to hide newer reports on page 2.
+            var minimumIncrementalPages = Math.Min(4, lastPage);
+            var pageBatchSize = incremental ? 3 : 12;
+            for (var firstPage = 2;
+                 firstPage <= lastPage &&
+                 (!incremental || pagesScanned < minimumIncrementalPages ||
+                  !encounteredCachedReport);
+                 firstPage += pageBatchSize)
             {
                 var pageNumbers = Enumerable.Range(
                     firstPage, Math.Min(pageBatchSize, lastPage - firstPage + 1)).ToList();
-                StatusMessage = $"Scanning archive pages {firstPage}–{pageNumbers[^1]} of {lastPage}…";
+                StatusMessage = incremental
+                    ? $"Checking recent archive pages {firstPage}–{pageNumbers[^1]}…"
+                    : $"Building cache: pages {firstPage}–{pageNumbers[^1]} of {lastPage}…";
                 var pages = await FetchManyAsync(pageNumbers
                     .Select(page => ForumCoursesService.PageUrl(forumUrl, page))
                     .ToList());
                 for (var index = 0; index < pages.Count; index++)
+                {
                     if (KeepMatching(pages[index]) == 0)
                         throw new InvalidOperationException(
                             $"No threads were recognised on archive page {pageNumbers[index]}. " +
                             "The scan was stopped rather than returning an incomplete history.");
+                    pagesScanned = pageNumbers[index];
+                }
             }
 
-            var nights = BuildNights(matching);
-            Nights.Clear();
-            foreach (var night in nights) Nights.Add(night);
+            _cachedReports = reportsByUrl.Values
+                .OrderByDescending(report => report.Date ?? DateTime.MinValue)
+                .ToList();
+            PopulateMonths(_cachedReports);
+            SaveCache(forumUrl);
             HasScanned = true;
 
-            StatusMessage = $"{matching.Count} {_config.Platoon.Name} training report(s) across " +
-                            $"{Nights.Count} PDT date(s) — " +
-                            $"{lastPage} archive page(s) scanned at {DateTime.Now:HH:mm}.";
+            var undated = _cachedReports.Count(report => !report.Date.HasValue);
+            var cacheNote = incremental
+                ? $"checked {pagesScanned} newest archive page(s)"
+                : $"{lastPage} archive page(s) cached";
+            StatusMessage = $"{_cachedReports.Count} {_config.Platoon.Name} training report(s) " +
+                            $"across {Months.Count} month(s) — {cacheNote} at {DateTime.Now:HH:mm}" +
+                            (undated > 0 ? $" · {undated} report(s) have no recognised date." : ".");
 
             int KeepMatching(string html)
             {
                 var threads = ForumCoursesService.ParseThreads(html, forumUrl);
                 foreach (var thread in threads)
                 {
-                    if (!seen.Add(thread.Url)) continue;
-                    if (TrainingTitleRx.IsMatch(thread.Title) &&
-                        _platoonTitleRx.IsMatch(thread.Title) &&
-                        SubunitOf(thread.Title) != "HQ")
-                        matching.Add(thread);
+                    if (!TrainingTitleRx.IsMatch(thread.Title) ||
+                        !_platoonTitleRx.IsMatch(thread.Title) ||
+                        SubunitOf(thread.Title) == "HQ")
+                        continue;
+
+                    if (knownAtStart.Contains(thread.Url))
+                        encounteredCachedReport = true;
+                    reportsByUrl[thread.Url] = thread;
                 }
                 return threads.Count;
             }
@@ -128,6 +193,29 @@ public partial class TrainingReportsViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    internal List<TrainingReportMonth> BuildMonths(IEnumerable<ForumThread> reports) =>
+        reports
+            .Where(report => report.Date.HasValue &&
+                             TrainingTitleRx.IsMatch(report.Title) &&
+                             _platoonTitleRx.IsMatch(report.Title) &&
+                             SubunitOf(report.Title) != "HQ")
+            .GroupBy(report => new DateTime(
+                report.Date!.Value.Year, report.Date.Value.Month, 1))
+            .OrderByDescending(group => group.Key)
+            .Select(group => new TrainingReportMonth(group.Key, BuildNights(group)))
+            .ToList();
+
+    private void PopulateMonths(IEnumerable<ForumThread> reports)
+    {
+        var selected = SelectedMonth?.Month;
+        var months = BuildMonths(reports);
+        Months.Clear();
+        foreach (var month in months) Months.Add(month);
+        SelectedMonth = Months.FirstOrDefault(month => month.Month == selected) ??
+                        Months.FirstOrDefault();
+        OnPropertyChanged(nameof(HasData));
     }
 
     private List<PatrolNight> BuildNights(IEnumerable<ForumThread> reports)
@@ -154,6 +242,52 @@ public partial class TrainingReportsViewModel : ObservableObject
                 available.Where(thread => !used.Contains(thread)).ToList()));
         }
         return result;
+    }
+
+    private void LoadCache()
+    {
+        try
+        {
+            if (!File.Exists(CachePath)) return;
+            var cache = JsonSerializer.Deserialize<TrainingReportsCache>(
+                File.ReadAllText(CachePath));
+            var configuredUrl = _config.Forum.TrainingReportsForumUrl.Trim();
+            if (cache is null || cache.Reports.Count == 0 ||
+                !string.Equals(cache.ForumUrl, configuredUrl, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _cachedReports = cache.Reports
+                .Where(report => TrainingTitleRx.IsMatch(report.Title) &&
+                                 _platoonTitleRx.IsMatch(report.Title) &&
+                                 SubunitOf(report.Title) != "HQ")
+                .DistinctBy(report => report.Url, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(report => report.Date ?? DateTime.MinValue)
+                .ToList();
+            if (_cachedReports.Count == 0) return;
+
+            PopulateMonths(_cachedReports);
+            HasScanned = true;
+            StatusMessage = $"Loaded {_cachedReports.Count} cached report(s) instantly · last checked " +
+                            $"{cache.SavedUtc.ToLocalTime():dd MMM yyyy HH:mm}. " +
+                            "Use refresh to check for newer reports.";
+        }
+        catch
+        {
+            // A stale or partial cache is disposable; the next scan rebuilds it.
+            _cachedReports.Clear();
+        }
+    }
+
+    private void SaveCache(string forumUrl)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(CachePath)!);
+        var cache = new TrainingReportsCache
+        {
+            ForumUrl = forumUrl,
+            SavedUtc = DateTime.UtcNow,
+            Reports = _cachedReports,
+        };
+        File.WriteAllText(CachePath, JsonSerializer.Serialize(cache));
     }
 
     private async Task<IReadOnlyList<string>> FetchManyAsync(IReadOnlyList<string> urls)

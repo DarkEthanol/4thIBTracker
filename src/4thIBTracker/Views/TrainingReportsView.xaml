@@ -10,13 +10,20 @@
             <DockPanel DockPanel.Dock="Top">
                 <StackPanel>
                     <TextBlock Style="{StaticResource H1}" Text="Training Reports"/>
-                    <TextBlock Text="PDT reports for the configured platoon, grouped by training date."
+                    <TextBlock Text="PDT reports for the configured platoon, grouped by month and training date."
                                Foreground="{StaticResource TextDim}" FontSize="13"
                                Margin="0,-5,0,8"/>
                 </StackPanel>
-                <Button DockPanel.Dock="Right" Content="↻ Scan archive" Padding="12,5"
-                        FontWeight="SemiBold" HorizontalAlignment="Right"
-                        VerticalAlignment="Top" Command="{Binding ScanCommand}"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <ComboBox Width="185" Margin="0,0,8,0"
+                              ItemsSource="{Binding Months}"
+                              SelectedItem="{Binding SelectedMonth}"
+                              DisplayMemberPath="Label"
+                              ToolTip="Choose the month of PDT reports to display"/>
+                    <Button Content="↻ Refresh archive" Padding="12,5"
+                            FontWeight="SemiBold" Command="{Binding ScanCommand}"/>
+                </StackPanel>
             </DockPanel>
 
             <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}"
@@ -35,8 +42,11 @@
                 </ProgressBar.Style>
             </ProgressBar>
 
+            <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedMonth.Summary}"
+                       Foreground="{StaticResource TextDim}" Margin="0,0,0,10"/>
+
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Nights}">
+                <ItemsControl ItemsSource="{Binding SelectedMonth.Nights}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
@@ -87,56 +97,20 @@
                                                             </Button.Style>
                                                         </Button>
                                                         <StackPanel VerticalAlignment="Center">
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <TextBlock FontSize="13.5">
-                                                                    <TextBlock.Style>
-                                                                        <Style TargetType="TextBlock">
-                                                                            <Setter Property="Text" Value="✗ Not submitted"/>
-                                                                            <Setter Property="Foreground" Value="{StaticResource Danger}"/>
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsSubmitted}" Value="True">
-                                                                                    <Setter Property="Text" Value="✓ Submitted"/>
-                                                                                    <Setter Property="Foreground" Value="{StaticResource Accent}"/>
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </TextBlock.Style>
-                                                                </TextBlock>
-                                                                <Border CornerRadius="8" Padding="8,1" Margin="8,0,0,0"
-                                                                        VerticalAlignment="Center">
-                                                                    <Border.Style>
-                                                                        <Style TargetType="Border">
-                                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding SignedOff}" Value="True">
-                                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                                    <Setter Property="Background" Value="{StaticResource AccentDim}"/>
-                                                                                </DataTrigger>
-                                                                                <DataTrigger Binding="{Binding SignedOff}" Value="False">
-                                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                                    <Setter Property="Background" Value="#4A3A2A"/>
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </Border.Style>
-                                                                    <TextBlock FontSize="11.5" FontWeight="SemiBold">
-                                                                        <TextBlock.Style>
-                                                                            <Style TargetType="TextBlock">
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding SignedOff}" Value="True">
-                                                                                        <Setter Property="Text" Value="✓ signed off"/>
-                                                                                        <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
-                                                                                    </DataTrigger>
-                                                                                    <DataTrigger Binding="{Binding SignedOff}" Value="False">
-                                                                                        <Setter Property="Text" Value="✗ needs sign-off"/>
-                                                                                        <Setter Property="Foreground" Value="{StaticResource Warn}"/>
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </TextBlock.Style>
-                                                                    </TextBlock>
-                                                                </Border>
-                                                            </StackPanel>
+                                                            <TextBlock FontSize="13.5">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Text" Value="✗ Not submitted"/>
+                                                                        <Setter Property="Foreground" Value="{StaticResource Danger}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsSubmitted}" Value="True">
+                                                                                <Setter Property="Text" Value="✓ Submitted"/>
+                                                                                <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
                                                             <TextBlock Text="{Binding Detail}" FontSize="12"
                                                                        Foreground="{StaticResource TextDim}"/>
                                                         </StackPanel>

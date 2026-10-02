@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private PatrolReportsView? _patrolReports;
     private TrainingReportsView? _trainingReports;
     private readonly Dictionary<string, WebView2> _browsers = new();
+    private Button? _activeNavButton;
 
     public MainWindow()
     {
@@ -137,47 +138,68 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
+    private void ShowPage(object content, Button? navButton, string pageName)
+    {
+        if (_activeNavButton != null) _activeNavButton.Tag = null;
+        _activeNavButton = navButton;
+        if (_activeNavButton != null) _activeNavButton.Tag = "Active";
+        ContentHost.Content = content;
+        TitleBarSubtitle.Text = $"·  {_config.Platoon.Name}  ·  {pageName}";
+    }
+
     private void NavDashboard_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _dashboard ??= new DashboardView(new DashboardViewModel(_sheets, _config));
+        ShowPage(_dashboard ??= new DashboardView(new DashboardViewModel(_sheets, _config)),
+            DashboardNavButton, "Dashboard");
 
     private void NavAttendance_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _attendance ??= new AttendanceView(
-            new AttendanceViewModel(_sheets, _config),
-            new PlatoonAttendanceViewModel(_config));
+        ShowPage(_attendance ??= new AttendanceView(
+                new AttendanceViewModel(_sheets, _config),
+                new PlatoonAttendanceViewModel(_config)),
+            AttendanceNavButton, "Attendance");
 
     private void NavLoas_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _loas ??= new LoaView(new LoaViewModel(_config));
+        ShowPage(_loas ??= new LoaView(new LoaViewModel(_config)),
+            LoasNavButton, "Operation LOAs");
 
     private void NavCourses_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _courses ??= new CoursesView(new CoursesViewModel(_sheets, _config));
+        ShowPage(_courses ??= new CoursesView(new CoursesViewModel(_sheets, _config)),
+            CoursesNavButton, "Courses");
 
     private void NavCampaignMedals_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _campaignMedals ??=
-            new CampaignMedalsView(new CampaignMedalsViewModel(_sheets, _config));
+        ShowPage(_campaignMedals ??=
+                new CampaignMedalsView(new CampaignMedalsViewModel(_sheets, _config)),
+            CampaignMedalsNavButton, "Medals");
 
     private void NavCefo_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _cefo ??= new CefoView(new CefoViewModel(_sheets, _config));
+        ShowPage(_cefo ??= new CefoView(new CefoViewModel(_sheets, _config)),
+            CefoNavButton, "CEFO");
 
     private void NavFillIns_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _fillIns ??= new FillInsView(new FillInsViewModel(_sheets, _config));
+        ShowPage(_fillIns ??= new FillInsView(new FillInsViewModel(_sheets, _config)),
+            FillInsNavButton, "Fill-ins");
 
     private void NavLinks_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _links ??= new LinksView(new LinksViewModel(_sheets, _config));
+        ShowPage(_links ??= new LinksView(new LinksViewModel(_sheets, _config)),
+            LinksNavButton, "Links");
 
     private void NavForumCourses_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _forumCourses ??= new ForumCoursesView(new ForumCoursesViewModel(_sheets, _config));
+        ShowPage(_forumCourses ??= new ForumCoursesView(new ForumCoursesViewModel(_sheets, _config)),
+            ForumCoursesNavButton, "NCO Courses");
 
     private void NavAddress_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _address ??= new AddressView(new AddressViewModel(_sheets, _config));
+        ShowPage(_address ??= new AddressView(new AddressViewModel(_sheets, _config)),
+            AddressNavButton, "Sgt's Address");
 
     private void NavTodo_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _todo ??= new TodoView(_todoViewModel);
+        ShowPage(_todo ??= new TodoView(_todoViewModel), TodoNavButton, "Todo");
 
     private void NavPatrolReports_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _patrolReports ??= new PatrolReportsView(new PatrolReportsViewModel(_config));
+        ShowPage(_patrolReports ??= new PatrolReportsView(new PatrolReportsViewModel(_config)),
+            PatrolReportsNavButton, "Patrol Reports");
 
     private void NavTrainingReports_Click(object sender, RoutedEventArgs e) =>
-        ContentHost.Content = _trainingReports ??= new TrainingReportsView(new TrainingReportsViewModel(_config));
+        ShowPage(_trainingReports ??= new TrainingReportsView(new TrainingReportsViewModel(_config)),
+            TrainingReportsNavButton, "Training Reports");
 
     private SettingsView? _settings;
     private void NavSettings_Click(object sender, RoutedEventArgs e)
@@ -191,7 +213,7 @@ public partial class MainWindow : Window
             vm.SettingsSaved += ApplySettingsWithoutRestart;
             _settings = new SettingsView(vm);
         }
-        ContentHost.Content = _settings;
+        ShowPage(_settings, null, "Settings");
     }
 
     private void NavUpdate_Click(object sender, RoutedEventArgs e) =>
@@ -245,7 +267,7 @@ public partial class MainWindow : Window
 
     private async void NavBrowserTab_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as Button)?.Tag is not BrowserTab tab) return;
+        if (sender is not Button button || button.CommandParameter is not BrowserTab tab) return;
         if (!_browsers.TryGetValue(tab.Name, out var view))
         {
             view = new WebView2();
@@ -254,6 +276,6 @@ public partial class MainWindow : Window
             await view.EnsureCoreWebView2Async(env);
             view.CoreWebView2.Navigate(tab.Url);
         }
-        ContentHost.Content = view;
+        ShowPage(view, button, tab.Name);
     }
 }

@@ -189,6 +189,29 @@ Check(addressMonthTable.Months[new DateTime(2025, 9, 1)].Overall == 88 &&
       addressMonthTable.Months[new DateTime(2026, 8, 1)].Overall == 79,
     "same month names remain isolated by attendance year");
 
+var trainingReports = new TrainingReportsViewModel(new AppConfig
+{
+    Platoon = new AppConfig.PlatoonSection { Number = 1 },
+});
+var trainingMonths = trainingReports.BuildMonths(
+[
+    new ForumThread("Training Report: 02/09/2026 - 1 Platoon, 1 Section",
+        "https://unit.invalid/thread-1.html", "Cpl. One", new DateTime(2026, 9, 2)),
+    new ForumThread("Training Report: 02/09/2026 - 1 Platoon, 2 Section",
+        "https://unit.invalid/thread-2.html", "Cpl. Two", new DateTime(2026, 9, 2)),
+    new ForumThread("Training Report: 26/08/2026 - 1 Platoon, 3 Section",
+        "https://unit.invalid/thread-3.html", "Cpl. Three", new DateTime(2026, 8, 26)),
+    new ForumThread("Training Report: 02/09/2026 - 1 Platoon, HQ",
+        "https://unit.invalid/thread-4.html", "Sgt. HQ", new DateTime(2026, 9, 2)),
+]);
+Check(trainingMonths.Select(month => month.Label)
+        .SequenceEqual(["September 2026", "August 2026"]),
+    "training reports grouped into newest-first month choices");
+Check(trainingMonths[0].Nights.Count == 1 &&
+      trainingMonths[0].Nights[0].SubmittedCount == 2 &&
+      trainingMonths[0].ReportCount == 2,
+    "training month keeps section submissions and excludes HQ");
+
 var platoonForum = """
     <a href="forum-24.html">1 Platoon, HQ</a>
     <span>Sub Forums:</span> <a href="forum-801.html">LOA</a>

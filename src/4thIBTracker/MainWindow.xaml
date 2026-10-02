@@ -97,74 +97,90 @@
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="210"/>
+                <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Sidebar -->
             <Border Grid.Column="0" Background="{StaticResource BgSidebar}">
                 <DockPanel LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Top" Margin="0,14,0,0">
-                        <TextBlock Text="VIEWS" FontSize="11.5" Foreground="{StaticResource TextDim}"
-                                   Margin="16,0,0,4"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Dashboard"   Click="NavDashboard_Click"/>
-                        <Button x:Name="TodoNavButton" Style="{StaticResource NavButton}"
-                                Click="NavTodo_Click">
-                            <Grid Width="182">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="  Todo" VerticalAlignment="Center"/>
-                                <Border Grid.Column="1" Background="{StaticResource Danger}"
-                                        CornerRadius="10" MinWidth="22" Height="22" Padding="6,1">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding OverdueCount}" Value="0">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <TextBlock Text="{Binding OverdueCount}" Foreground="White"
-                                               FontSize="12" FontWeight="Bold"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                            </Grid>
-                        </Button>
-                        <Button Style="{StaticResource NavButton}" Content="  Attendance"  Click="NavAttendance_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Operation LOAs" Click="NavLoas_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Courses"     Click="NavCourses_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Medals"      Click="NavCampaignMedals_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  CEFO"        Click="NavCefo_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Fill-ins"    Click="NavFillIns_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Links"       Click="NavLinks_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  NCO Courses" Click="NavForumCourses_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Patrol Reports" Click="NavPatrolReports_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Training Reports" Click="NavTrainingReports_Click"/>
-                        <Button Style="{StaticResource NavButton}" Content="  Sgt's Address" Click="NavAddress_Click"/>
-                    </StackPanel>
-
-                    <StackPanel DockPanel.Dock="Top" Margin="0,18,0,0">
-                        <TextBlock Text="SHEETS (BROWSER)" FontSize="11.5"
-                                   Foreground="{StaticResource TextDim}" Margin="16,0,0,4"/>
-                        <ItemsControl x:Name="BrowserTabList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Style="{StaticResource NavButton}"
-                                            Content="{Binding Name}" Tag="{Binding}"
-                                            Click="NavBrowserTab_Click"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-
                     <TextBlock DockPanel.Dock="Bottom" x:Name="FooterText" Margin="16,0,8,12"
                                VerticalAlignment="Bottom" FontSize="11.5"
                                Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
-                    <Border/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,2,0,12">
+                            <TextBlock Style="{StaticResource NavGroupHeader}" Text="OVERVIEW"/>
+                            <Button x:Name="DashboardNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Dashboard" Click="NavDashboard_Click"/>
+                            <Button x:Name="TodoNavButton" Style="{StaticResource NavButton}"
+                                    Click="NavTodo_Click">
+                                <Grid Width="192">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="  Todo" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" Background="{StaticResource Danger}"
+                                            CornerRadius="10" MinWidth="22" Height="22" Padding="6,1">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding OverdueCount}" Value="0">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding OverdueCount}" Foreground="White"
+                                                   FontSize="12" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                            </Button>
+
+                            <TextBlock Style="{StaticResource NavGroupHeader}" Text="PLATOON"/>
+                            <Button x:Name="AttendanceNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Attendance" Click="NavAttendance_Click"/>
+                            <Button x:Name="LoasNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Operation LOAs" Click="NavLoas_Click"/>
+                            <Button x:Name="CoursesNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Courses" Click="NavCourses_Click"/>
+                            <Button x:Name="ForumCoursesNavButton" Style="{StaticResource NavButton}"
+                                    Content="  NCO Courses" Click="NavForumCourses_Click"/>
+                            <Button x:Name="CampaignMedalsNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Medals" Click="NavCampaignMedals_Click"/>
+
+                            <TextBlock Style="{StaticResource NavGroupHeader}" Text="OPERATIONS"/>
+                            <Button x:Name="PatrolReportsNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Patrol Reports" Click="NavPatrolReports_Click"/>
+                            <Button x:Name="TrainingReportsNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Training Reports" Click="NavTrainingReports_Click"/>
+                            <Button x:Name="FillInsNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Fill-ins" Click="NavFillIns_Click"/>
+                            <Button x:Name="AddressNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Sgt's Address" Click="NavAddress_Click"/>
+
+                            <TextBlock Style="{StaticResource NavGroupHeader}" Text="REFERENCE"/>
+                            <Button x:Name="CefoNavButton" Style="{StaticResource NavButton}"
+                                    Content="  CEFO" Click="NavCefo_Click"/>
+                            <Button x:Name="LinksNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Links" Click="NavLinks_Click"/>
+
+                            <TextBlock Style="{StaticResource NavGroupHeader}" Text="SHEETS (BROWSER)"/>
+                            <ItemsControl x:Name="BrowserTabList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource NavButton}"
+                                                Content="{Binding Name}"
+                                                CommandParameter="{Binding}"
+                                                Click="NavBrowserTab_Click"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
 
