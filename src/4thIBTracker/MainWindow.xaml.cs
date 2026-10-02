@@ -147,9 +147,83 @@ public partial class MainWindow : Window
         TitleBarSubtitle.Text = $"·  {_config.Platoon.Name}  ·  {pageName}";
     }
 
-    private void NavDashboard_Click(object sender, RoutedEventArgs e) =>
-        ShowPage(_dashboard ??= new DashboardView(new DashboardViewModel(_sheets, _config)),
-            DashboardNavButton, "Dashboard");
+    private void NavDashboard_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dashboard is null)
+        {
+            var viewModel = new DashboardViewModel(_sheets, _config)
+            {
+                NavigateRequested = NavigateFromDashboard,
+            };
+            _dashboard = new DashboardView(viewModel);
+        }
+        ShowPage(_dashboard, DashboardNavButton, "Dashboard");
+    }
+
+    private async void NavigateFromDashboard(DashboardDestination destination)
+    {
+        switch (destination)
+        {
+            case DashboardDestination.NcoCourses:
+                NavForumCourses_Click(this, new RoutedEventArgs());
+                return;
+            case DashboardDestination.Courses:
+                NavCourses_Click(this, new RoutedEventArgs());
+                return;
+            case DashboardDestination.Discipline:
+                await ShowDashboardBrowserAsync(
+                    "discipline", "Discipline Tracker", SheetUrl("Discipline"));
+                return;
+            case DashboardDestination.Logistics:
+                await ShowDashboardBrowserAsync(
+                    "logistics", "Logistics", SheetUrl("Logistics"));
+                return;
+            case DashboardDestination.Orbat:
+                await ShowDashboardBrowserAsync(
+                    "orbat", "Website ORBAT", _config.OrbatUrl);
+                return;
+            case DashboardDestination.Transfers:
+                var transferUrl = _config.Forum.PendingTransferForums.FirstOrDefault() ??
+                                  _config.Forum.CompletedTransferForums.FirstOrDefault() ?? "";
+                await ShowDashboardBrowserAsync(
+                    "transfers", "Transfers", transferUrl);
+                return;
+        }
+    }
+
+    private string SheetUrl(string key)
+    {
+        var sheet = _config.Sheet(key);
+        var configuredTab = _config.BrowserTabs.FirstOrDefault(tab =>
+            !string.IsNullOrWhiteSpace(sheet.Id) &&
+            tab.Url.Contains(sheet.Id, StringComparison.OrdinalIgnoreCase));
+        if (configuredTab is not null) return configuredTab.Url;
+        return string.IsNullOrWhiteSpace(sheet.Id)
+            ? ""
+            : $"https://docs.google.com/spreadsheets/d/{sheet.Id}/edit";
+    }
+
+    private async Task ShowDashboardBrowserAsync(string key, string title, string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            MessageBox.Show(
+                $"The {title} link is not configured.",
+                "Dashboard link", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var cacheKey = $"dashboard:{key}";
+        if (!_browsers.TryGetValue(cacheKey, out var view))
+        {
+            view = new WebView2();
+            _browsers[cacheKey] = view;
+            var env = await WebViewEnvironmentService.GetAsync();
+            await view.EnsureCoreWebView2Async(env);
+            view.CoreWebView2.Navigate(url);
+        }
+        ShowPage(view, null, title);
+    }
 
     private void NavAttendance_Click(object sender, RoutedEventArgs e) =>
         ShowPage(_attendance ??= new AttendanceView(

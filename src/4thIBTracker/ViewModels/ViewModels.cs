@@ -10,6 +10,7 @@ namespace FourthIBTracker.ViewModels;
 
 // ===================================================================== Dashboard
 public enum DashboardNcoCourseStatus { Completed, Upcoming, NotScheduled }
+public enum DashboardDestination { Discipline, NcoCourses, Orbat, Logistics, Courses, Transfers }
 
 public sealed record DashboardNcoCourse(
     string Position,
@@ -44,6 +45,13 @@ public partial class DashboardViewModel : ObservableObject
     public ObservableCollection<TransferItem> PendingTransfers { get; } = new();
     public ObservableCollection<TransferItem> CompletedTransfers { get; } = new();
 
+    public int DisciplinaryAlertCount => ActiveDisciplinaries.Count;
+    public int OrbatMismatchAlertCount => OrbatMismatches.Count;
+    public int UnscheduledNcoAlertCount => NcoChecks.Count(item =>
+        item.Status == DashboardNcoCourseStatus.NotScheduled);
+    public int PendingTransferAlertCount => PendingTransfers.Count;
+    public int TotalStrength => Sections.Sum(section => section.Soldiers.Count);
+
     [ObservableProperty] private bool orbatInSync;
     [ObservableProperty] private string transferStatus = "Loading with the dashboard…";
 
@@ -56,9 +64,59 @@ public partial class DashboardViewModel : ObservableObject
     [ObservableProperty] private string? error;
     [ObservableProperty] private string ncoMonthTitle = "";
     [ObservableProperty] private string ncoStatus = "";
+    [ObservableProperty] private string disciplineStatus = "Waiting to refresh…";
+    [ObservableProperty] private string outstandingCoursesStatus = "Waiting to refresh…";
+    [ObservableProperty] private string platoonStrengthStatus = "Waiting to refresh…";
+    [ObservableProperty] private string logisticsStatus = "Waiting to refresh…";
+    [ObservableProperty] private string orbatSyncStatus = "Waiting to refresh…";
+
+    public bool DisciplineStatusIsError => IsErrorStatus(DisciplineStatus);
+    public bool OutstandingCoursesStatusIsError => IsErrorStatus(OutstandingCoursesStatus);
+    public bool PlatoonStrengthStatusIsError => IsErrorStatus(PlatoonStrengthStatus);
+    public bool LogisticsStatusIsError => IsErrorStatus(LogisticsStatus);
+    public bool NcoStatusIsError => IsErrorStatus(NcoStatus);
+    public bool OrbatSyncStatusIsError => IsErrorStatus(OrbatSyncStatus);
+    public bool TransferStatusIsError => IsErrorStatus(TransferStatus);
+
+    public Action<DashboardDestination>? NavigateRequested { get; set; }
 
     public DashboardViewModel(GoogleSheetsService sheets, AppConfig config)
-    { _sheets = sheets; _config = config; }
+    {
+        _sheets = sheets;
+        _config = config;
+        ActiveDisciplinaries.CollectionChanged += (_, _) =>
+            OnPropertyChanged(nameof(DisciplinaryAlertCount));
+        OrbatMismatches.CollectionChanged += (_, _) =>
+            OnPropertyChanged(nameof(OrbatMismatchAlertCount));
+        NcoChecks.CollectionChanged += (_, _) =>
+            OnPropertyChanged(nameof(UnscheduledNcoAlertCount));
+        PendingTransfers.CollectionChanged += (_, _) =>
+            OnPropertyChanged(nameof(PendingTransferAlertCount));
+        Sections.CollectionChanged += (_, _) =>
+            OnPropertyChanged(nameof(TotalStrength));
+    }
+
+    [RelayCommand]
+    private void Navigate(DashboardDestination destination) =>
+        NavigateRequested?.Invoke(destination);
+
+    private static bool IsErrorStatus(string status) =>
+        status.StartsWith("Error ·", StringComparison.OrdinalIgnoreCase);
+
+    partial void OnDisciplineStatusChanged(string value) =>
+        OnPropertyChanged(nameof(DisciplineStatusIsError));
+    partial void OnOutstandingCoursesStatusChanged(string value) =>
+        OnPropertyChanged(nameof(OutstandingCoursesStatusIsError));
+    partial void OnPlatoonStrengthStatusChanged(string value) =>
+        OnPropertyChanged(nameof(PlatoonStrengthStatusIsError));
+    partial void OnLogisticsStatusChanged(string value) =>
+        OnPropertyChanged(nameof(LogisticsStatusIsError));
+    partial void OnNcoStatusChanged(string value) =>
+        OnPropertyChanged(nameof(NcoStatusIsError));
+    partial void OnOrbatSyncStatusChanged(string value) =>
+        OnPropertyChanged(nameof(OrbatSyncStatusIsError));
+    partial void OnTransferStatusChanged(string value) =>
+        OnPropertyChanged(nameof(TransferStatusIsError));
 
     [RelayCommand]
     public async Task LoadAsync()
@@ -74,7 +132,7 @@ public partial class DashboardViewModel : ObservableObject
         // Each card still catches its own error, so one failure cannot blank the page.
         var loads = new[]
         {
-            Load("Discipline", async () =>
+            Load("Discipline", value => DisciplineStatus = value, async () =>
             {
                 var disc = _config.Sheet("Discipline");
                 var rows = await _sheets.ReadValuesAsync(disc.Id, $"'{disc.Tab}'!A2:G200");
@@ -83,7 +141,7 @@ public partial class DashboardViewModel : ObservableObject
                     ActiveDisciplinaries.Add(d);
             }),
 
-            Load("Course gaps", async () =>
+            Load("Course gaps", value => OutstandingCoursesStatus = value, async () =>
             {
                 // Counted directly from the Section Courses matrix.
                 var sc = _config.Sheet("SectionCourses");
@@ -108,17 +166,17 @@ public partial class DashboardViewModel : ObservableObject
                 foreach (var g in sorted) CourseGaps.Add(g);
             }),
 
-            Load("ORBAT", async () =>
+            Load("ORBAT", value => PlatoonStrengthStatus = value, async () =>
             {
-                var att = _config.Sheet("Attendance");
-                var rows = await _sheets.ReadValuesAsync(att.Id, $"'{att.Tab}'!A1:W25");
+                var sectionRows = SheetParsers.ParsePlatoonSections(
+                    await sutRowsTask, _config.Platoon.Number);
                 Sections.Clear();
-                foreach (var g in SheetParsers.ParseAttendance(rows).GroupBy(r => r.SectionName))
-                    Sections.Add(new SectionRoster(g.Key,
-                        new ObservableCollection<string>(g.Select(r => r.SoldierName))));
+                foreach (var section in sectionRows)
+                    Sections.Add(new SectionRoster(section.Key,
+                        new ObservableCollection<string>(section.Value)));
             }),
 
-            Load("Logistics", async () =>
+            Load("Logistics", value => LogisticsStatus = value, async () =>
             {
                 var logi = _config.Sheet("Logistics");
                 var tab = await _sheets.ResolveTabAsync(logi.Id, logi.Tab);
@@ -131,12 +189,12 @@ public partial class DashboardViewModel : ObservableObject
                     LogiOrder.Add(item);
             }),
 
-            Load("NCO tracker", async () =>
+            Load("NCO tracker", value => NcoStatus = value, async () =>
             {
                 await LoadNcoCoursesAsync(await sutRowsTask);
-            }),
+            }, keepsOwnSuccessStatus: true),
 
-            Load("ORBAT sync", async () =>
+            Load("ORBAT sync", value => OrbatSyncStatus = value, async () =>
             {
                 // The website does not depend on the sheet metadata/value read,
                 // so let it download while the Google requests are in flight.
@@ -156,15 +214,9 @@ public partial class DashboardViewModel : ObservableObject
                 OrbatInSync = OrbatMismatches.Count == 0;
             }),
 
-            Load("Transfers", async () =>
-            {
-                try { await LoadTransfersAsync(await sutRowsTask); }
-                catch (Exception ex)
-                {
-                    TransferStatus = $"Transfers unavailable: {ex.Message}";
-                    throw;
-                }
-            }),
+            Load("Transfers", value => TransferStatus = value,
+                async () => await LoadTransfersAsync(await sutRowsTask),
+                keepsOwnSuccessStatus: true),
         };
 
         await Task.WhenAll(loads);
@@ -173,11 +225,21 @@ public partial class DashboardViewModel : ObservableObject
         IsLoading = false;
         return;
 
-        async Task Load(string what, Func<Task> action)
+        async Task Load(
+            string what,
+            Action<string> setStatus,
+            Func<Task> action,
+            bool keepsOwnSuccessStatus = false)
         {
-            try { await action(); }
+            setStatus("Loading…");
+            try
+            {
+                await action();
+                if (!keepsOwnSuccessStatus) setStatus($"Updated {DateTime.Now:HH:mm}");
+            }
             catch (Exception ex)
             {
+                setStatus($"Error · {ex.Message}");
                 lock (errors) errors.Add($"{what}: {ex.Message}");
             }
         }

@@ -66,6 +66,28 @@ Check(new DashboardNcoCourse("1-1-C", "1 Section", "C. Example",
           DashboardNcoCourseStatus.NotScheduled).StatusText == "✗ Not scheduled",
     "NCO dashboard status labels");
 
+var dashboardConfig = new AppConfig();
+var dashboard = new DashboardViewModel(
+    new GoogleSheetsService(dashboardConfig), dashboardConfig);
+dashboard.NcoChecks.Add(new DashboardNcoCourse(
+    "1-1-C", "1 Section", "C. Example", DashboardNcoCourseStatus.NotScheduled));
+dashboard.NcoChecks.Add(new DashboardNcoCourse(
+    "1-1-E", "2 Section", "D. Example", DashboardNcoCourseStatus.Upcoming));
+dashboard.Sections.Add(new SectionRoster(
+    "HQ", new System.Collections.ObjectModel.ObservableCollection<string>(["A", "B"])));
+dashboard.Sections.Add(new SectionRoster(
+    "1 Section", new System.Collections.ObjectModel.ObservableCollection<string>(["C", "D", "E"])));
+Check(dashboard.UnscheduledNcoAlertCount == 1 && dashboard.TotalStrength == 5,
+    "dashboard alert and platoon-strength summaries");
+dashboard.DisciplineStatus = "Error · unavailable";
+Check(dashboard.DisciplineStatusIsError,
+    "dashboard card error status detection");
+DashboardDestination? dashboardDestination = null;
+dashboard.NavigateRequested = destination => dashboardDestination = destination;
+dashboard.NavigateCommand.Execute(DashboardDestination.Courses);
+Check(dashboardDestination == DashboardDestination.Courses,
+    "dashboard card navigation routing");
+
 var attendanceIndex = """
     <a href="attendance.php?section=900">Battalion / 1 Platoon</a>
     <a href='attendance.php?section=901'>Battalion / 1 Platoon / 1 Section</a>
