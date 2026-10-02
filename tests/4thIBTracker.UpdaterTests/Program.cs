@@ -43,6 +43,13 @@ Check(platoonSettings.ExcludesOutstandingCourse("Advanced MG"),
     "whitespace-tolerant outstanding-course exclusion");
 Check(!platoonSettings.ExcludesOutstandingCourse("SERE Advanced"),
     "outstanding-course exclusion requires an exact name");
+Check(new AppConfig.PlatoonSection().OperationDayOfWeek == DayOfWeek.Saturday,
+    "operation night defaults to Saturday");
+Check(LoaViewModel.NextOperationNight(
+          new DateTime(2026, 10, 2), DayOfWeek.Saturday) == new DateTime(2026, 10, 3) &&
+      LoaViewModel.NextOperationNight(
+          new DateTime(2026, 10, 3), DayOfWeek.Saturday) == new DateTime(2026, 10, 10),
+    "LOA page chooses the next future operation night");
 
 Check(DashboardViewModel.ResolveNcoCourseStatus(
           sheetDone: true, forumCompleted: false, forumUpcoming: true) ==

@@ -27,8 +27,8 @@
                                Foreground="{StaticResource TextDim}" FontSize="13" Margin="0,0,7,0"/>
                     <DatePicker SelectedDate="{Binding SelectedDate, Mode=TwoWay}"
                                 Width="145" Height="31" VerticalContentAlignment="Center"/>
-                    <Button Content="Today" Padding="11,5" Margin="7,0,0,0"
-                            Command="{Binding SelectTodayCommand}"/>
+                    <Button Content="Next op night" Padding="11,5" Margin="7,0,0,0"
+                            Command="{Binding SelectNextOperationNightCommand}"/>
                     <Button Content="↻ Refresh" Padding="12,5" Margin="7,0,0,0"
                             FontWeight="SemiBold" Command="{Binding ScanCommand}"/>
                 </StackPanel>

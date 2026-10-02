@@ -2,6 +2,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace FourthIBTracker.Services;
 
@@ -24,6 +25,7 @@ public class AppConfig
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     public GoogleSection Google { get; set; } = new();
@@ -38,6 +40,7 @@ public class AppConfig
     public class PlatoonSection
     {
         public int Number { get; set; } = 1;
+        public DayOfWeek OperationDayOfWeek { get; set; } = DayOfWeek.Saturday;
         public string AddressFrom { get; set; } = "";
         public string SignOff { get; set; } = "";
         public List<string> NcoTrackerPositions { get; set; } = new();

@@ -81,6 +81,17 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Operation night"/>
+                            <ComboBox Grid.Column="1" ItemsSource="{Binding OperationDays}"
+                                      SelectedItem="{Binding OperationDayOfWeek, Mode=TwoWay}"
+                                      Width="180" HorizontalAlignment="Left"
+                                      ToolTip="The LOA page defaults to the next occurrence of this weekday"/>
+                        </Grid>
+                        <Grid Style="{StaticResource RowGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="230"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <TextBlock Style="{StaticResource RowLabel}" Text="Address 'From' line"/>
                             <TextBox Grid.Column="1" Text="{Binding AddressFrom}" MaxWidth="380" HorizontalAlignment="Left" Width="380"/>
                         </Grid>

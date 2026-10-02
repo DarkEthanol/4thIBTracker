@@ -14,17 +14,29 @@ public partial class LoaViewModel : ObservableObject
 
     public ObservableCollection<LoaSectionGroup> Sections { get; } = new();
 
-    [ObservableProperty] private DateTime? selectedDate = DateTime.Today;
+    [ObservableProperty] private DateTime? selectedDate;
     [ObservableProperty] private bool isLoading;
     [ObservableProperty] private string? error;
     [ObservableProperty] private string statusMessage = "Choose an operation night to see the platoon's LOAs.";
 
     public bool HasScanned { get; private set; }
 
-    public LoaViewModel(AppConfig config) => _config = config;
+    public LoaViewModel(AppConfig config)
+    {
+        _config = config;
+        selectedDate = NextOperationNight(DateTime.Today, config.Platoon.OperationDayOfWeek);
+    }
 
     [RelayCommand]
-    private void SelectToday() => SelectedDate = DateTime.Today;
+    private void SelectNextOperationNight() => SelectedDate = NextOperationNight(
+        DateTime.Today, _config.Platoon.OperationDayOfWeek);
+
+    internal static DateTime NextOperationNight(DateTime from, DayOfWeek operationDay)
+    {
+        var daysAhead = ((int)operationDay - (int)from.DayOfWeek + 7) % 7;
+        if (daysAhead == 0) daysAhead = 7;
+        return from.Date.AddDays(daysAhead);
+    }
 
     [RelayCommand]
     public async Task ScanAsync()
@@ -42,7 +54,8 @@ public partial class LoaViewModel : ObservableObject
             return;
         }
 
-        var date = (SelectedDate ?? DateTime.Today).Date;
+        var date = (SelectedDate ?? NextOperationNight(
+            DateTime.Today, _config.Platoon.OperationDayOfWeek)).Date;
         IsLoading = true;
         Error = null;
         try

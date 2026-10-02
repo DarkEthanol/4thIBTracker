@@ -34,6 +34,7 @@ public partial class SettingsViewModel : ObservableObject
 
     // Platoon
     [ObservableProperty] private string platoonNumber = "";
+    [ObservableProperty] private DayOfWeek operationDayOfWeek;
     [ObservableProperty] private string addressFrom = "";
     [ObservableProperty] private string signOff = "";
     [ObservableProperty] private string ncoPositions = "";
@@ -59,6 +60,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string credentialsStatus = "";
 
     public ObservableCollection<SheetEntryViewModel> Sheets { get; } = new();
+    public IReadOnlyList<DayOfWeek> OperationDays { get; } = Enum.GetValues<DayOfWeek>();
 
     public SettingsViewModel(AppConfig config, UpdateViewModel updates)
     {
@@ -76,6 +78,7 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         platoonNumber = config.Platoon.Number.ToString();
+        operationDayOfWeek = config.Platoon.OperationDayOfWeek;
         addressFrom = config.Platoon.AddressFrom;
         signOff = config.Platoon.SignOff;
         ncoPositions = string.Join(", ", config.Platoon.NcoTrackerPositions);
@@ -174,6 +177,7 @@ public partial class SettingsViewModel : ObservableObject
             }
 
             _config.Platoon.Number = n;
+            _config.Platoon.OperationDayOfWeek = OperationDayOfWeek;
             _config.Platoon.AddressFrom = AddressFrom.Trim();
             _config.Platoon.SignOff = SignOff.Trim();
             _config.Platoon.NcoTrackerPositions = SplitList(NcoPositions, ',');
