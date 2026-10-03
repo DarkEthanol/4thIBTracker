@@ -16,6 +16,7 @@ public partial class AttendanceView : UserControl
         InitializeComponent();
         _vm = vm;
         DataContext = vm;
+        websiteAttendanceViewModel.StageToSheet = vm.StageWebsiteAttendance;
         WebsiteAttendanceHost.Content = new PlatoonAttendanceView(websiteAttendanceViewModel);
         Focusable = true;
         Loaded += async (_, _) =>

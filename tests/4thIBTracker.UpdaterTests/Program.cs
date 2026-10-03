@@ -171,6 +171,38 @@ Check(AttendanceStatus.Present.ToColor().ToString() == "#FF6AA84F" &&
       AttendanceStatus.Awol.ToColor().ToString() == "#FFFF0000",
     "editable attendance uses website attendance colours");
 
+var attendanceConfig = new AppConfig();
+var editableAttendance = new AttendanceViewModel(
+    new GoogleSheetsService(attendanceConfig), attendanceConfig);
+AttendanceRowViewModel EditableAttendanceRow(string name) => new()
+{
+    Name = name,
+    Cells = Enumerable.Range(0, 5)
+        .Select(week => new AttendanceCellViewModel(
+            10, week, AttendanceStatus.None, () => AttendanceStatus.Present, () => { }))
+        .ToList(),
+};
+var bjornAttendanceRow = EditableAttendanceRow("V. Bjørn");
+var smithAttendanceRow = EditableAttendanceRow("J. Smith");
+var otherAttendanceRow = EditableAttendanceRow("A. Other");
+editableAttendance.Sections.Add(new AttendanceSectionViewModel(
+    "1 Section", new([bjornAttendanceRow, smithAttendanceRow])));
+editableAttendance.Sections.Add(new AttendanceSectionViewModel(
+    "2 Section", new([otherAttendanceRow])));
+var stagedAttendance = editableAttendance.StageWebsiteAttendance(attendanceMonths[0]);
+Check(stagedAttendance.Succeeded && stagedAttendance.Changed == 3 &&
+      stagedAttendance.Unmatched == 0 && editableAttendance.DirtyCount == 3,
+    "website attendance stages changes without saving them");
+Check(bjornAttendanceRow.Cells[0].Status == AttendanceStatus.Present &&
+      smithAttendanceRow.Cells[0].Status == AttendanceStatus.Loa &&
+      otherAttendanceRow.Cells[0].Status == AttendanceStatus.Late,
+    "website attendance maps statuses into the correct sheet week");
+Check(AttendanceViewModel.AttendanceNameKey("Pte. V. Bjørn") ==
+      AttendanceViewModel.AttendanceNameKey("V. Bjørn") &&
+      AttendanceViewModel.AttendanceNameKey("A/Cpl. C. Rhodes") ==
+      AttendanceViewModel.AttendanceNameKey("C. Rhodes"),
+    "website-to-sheet attendance matching ignores rank");
+
 Check(AddressViewModel.DefaultReportingMonth(new DateTime(2026, 10, 1)) ==
       new DateTime(2026, 9, 1),
     "Sergeant's Address defaults to the previous reporting month");

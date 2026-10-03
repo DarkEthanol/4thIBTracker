@@ -564,6 +564,13 @@ public class AttendanceRowViewModel
 public record AttendanceSectionViewModel(
     string Name, ObservableCollection<AttendanceRowViewModel> Rows);
 
+public sealed record AttendanceImportResult(
+    bool Succeeded,
+    string Message,
+    int Changed = 0,
+    int Unchanged = 0,
+    int Unmatched = 0);
+
 public partial class AttendanceViewModel : ObservableObject
 {
     private readonly GoogleSheetsService _sheets;
@@ -617,6 +624,112 @@ public partial class AttendanceViewModel : ObservableObject
         Sections.SelectMany(s => s.Rows).SelectMany(r => r.Cells);
 
     private int CountDirty() => AllCells().Count(c => c.IsDirty);
+
+    /// <summary>
+    /// Copies the selected website month into the editable grid without writing
+    /// anything to Google Sheets. The existing Save command remains the only
+    /// route that persists attendance changes.
+    /// </summary>
+    public AttendanceImportResult StageWebsiteAttendance(WebsiteAttendanceMonth month)
+    {
+        Error = null;
+        if (Sections.Count == 0)
+            return ImportFailure("Load the sheet attendance before copying website records.");
+
+        var sheetRows = Sections
+            .SelectMany(section => section.Rows)
+            .Select(row => new
+            {
+                Row = row,
+                Key = AttendanceNameKey(row.Name),
+            })
+            .Where(item => item.Key.Length > 0)
+            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Select(item => item.Row).ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+        // Build the final desired value for each cell first. If the website has
+        // more than one event in a calendar week, the latest event wins rather
+        // than counting or painting the same cell more than once.
+        var assignments = new Dictionary<(AttendanceRowViewModel Row, int Week), AttendanceStatus>();
+        var unmatchedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var record in month.Events.OrderBy(record => record.Date))
+        {
+            var week = (record.Date.Day - 1) / 7;
+            if (week is < 0 or > 4) continue;
+
+            foreach (var mark in record.Marks)
+            {
+                var status = mark.Status switch
+                {
+                    WebsiteAttendanceStatus.Present => (AttendanceStatus?)AttendanceStatus.Present,
+                    WebsiteAttendanceStatus.Late => AttendanceStatus.Late,
+                    WebsiteAttendanceStatus.Absent => AttendanceStatus.Awol,
+                    WebsiteAttendanceStatus.Excused => AttendanceStatus.Loa,
+                    _ => null,
+                };
+                if (status is null) continue;
+
+                var key = AttendanceNameKey(mark.Member);
+                if (key.Length == 0 || !sheetRows.TryGetValue(key, out var rows) || rows.Count != 1)
+                {
+                    unmatchedNames.Add(mark.Member);
+                    continue;
+                }
+
+                assignments[(rows[0], week)] = status.Value;
+            }
+        }
+
+        var changed = 0;
+        var unchanged = 0;
+        foreach (var (target, status) in assignments)
+        {
+            if (target.Row.Cells.Count <= target.Week) continue;
+            var cell = target.Row.Cells[target.Week];
+            if (cell.Status == status)
+            {
+                unchanged++;
+                continue;
+            }
+
+            cell.Status = status;
+            changed++;
+        }
+        DirtyCount = CountDirty();
+
+        var details = unmatchedNames.Count == 0
+            ? ""
+            : $" {unmatchedNames.Count} website name(s) could not be matched: " +
+              string.Join(", ", unmatchedNames.OrderBy(name => name)) + ".";
+        var message = changed == 0
+            ? $"No new changes were staged from {month.Label}; {unchanged} cell(s) already matched."
+            : $"Staged {changed} attendance cell(s) from {month.Label}; " +
+              $"{unchanged} already matched. Review the top grid, then click Save to Sheet to write them.";
+        message += details;
+        StatusMessage = message;
+        return new AttendanceImportResult(true, message, changed, unchanged, unmatchedNames.Count);
+    }
+
+    /// <summary>
+    /// Uses the trailing initial and surname as the identity so acting/current
+    /// rank prefixes on either source do not affect attendance matching.
+    /// </summary>
+    public static string AttendanceNameKey(string value)
+    {
+        var normalized = ForumLoaService.NormalizeName(value);
+        var match = System.Text.RegularExpressions.Regex.Match(normalized,
+            @"([\p{L}]\.\s*[\p{L}'\-]+(?:\s+[\p{L}'\-]+)*)\s*$");
+        return match.Success
+            ? System.Text.RegularExpressions.Regex.Replace(match.Groups[1].Value, @"\s+", " ").Trim()
+            : normalized;
+    }
+
+    private AttendanceImportResult ImportFailure(string message)
+    {
+        Error = message;
+        return new AttendanceImportResult(false, message);
+    }
 
     [RelayCommand]
     public async Task SaveAsync()

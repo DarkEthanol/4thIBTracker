@@ -11,6 +11,7 @@ public partial class PlatoonAttendanceViewModel : ObservableObject
 
     public Func<string, Task<string>>? FetchHtml { get; set; }
     public Func<IReadOnlyList<string>, Task<IReadOnlyList<string>>>? FetchHtmlBatch { get; set; }
+    public Func<WebsiteAttendanceMonth, AttendanceImportResult>? StageToSheet { get; set; }
 
     public ObservableCollection<WebsiteAttendanceMonth> Months { get; } = new();
     public IReadOnlyList<WebsiteAttendanceMark> Legend { get; } =
@@ -33,6 +34,28 @@ public partial class PlatoonAttendanceViewModel : ObservableObject
     public bool HasLoaded { get; private set; }
 
     public PlatoonAttendanceViewModel(AppConfig config) => _config = config;
+
+    [RelayCommand]
+    private void CopyToSheet()
+    {
+        Error = null;
+        if (SelectedMonth is null)
+        {
+            Error = "Load and select a website attendance month first.";
+            return;
+        }
+        if (StageToSheet is null)
+        {
+            Error = "The editable sheet attendance grid is not available.";
+            return;
+        }
+
+        var result = StageToSheet(SelectedMonth);
+        if (result.Succeeded)
+            StatusMessage = result.Message;
+        else
+            Error = result.Message;
+    }
 
     [RelayCommand]
     public async Task RefreshAsync()

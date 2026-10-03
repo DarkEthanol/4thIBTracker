@@ -15,6 +15,9 @@
                               ItemsSource="{Binding Months}"
                               SelectedItem="{Binding SelectedMonth}"
                               DisplayMemberPath="Label"/>
+                    <Button Content="Copy to sheet" Padding="12,5" FontWeight="SemiBold"
+                            Margin="0,0,8,0" Command="{Binding CopyToSheetCommand}"
+                            ToolTip="Stage this month's website records in the editable grid. Nothing is written until Save to Sheet is clicked."/>
                     <Button Content="↻ Refresh" Padding="12,5" FontWeight="SemiBold"
                             Command="{Binding RefreshCommand}"/>
                 </StackPanel>
