@@ -243,6 +243,53 @@ public class GoogleSheetsService
         }
     }
 
+    /// <summary>Returns every tab title in workbook order.</summary>
+    public async Task<IReadOnlyList<string>> GetTabNamesAsync(string spreadsheetId)
+    {
+        var svc = await GetServiceAsync();
+        var request = svc.Spreadsheets.Get(spreadsheetId);
+        request.Fields = "sheets(properties(index,title))";
+        var meta = await request.ExecuteAsync();
+        return meta.Sheets
+            .OrderBy(sheet => sheet.Properties.Index ?? int.MaxValue)
+            .Select(sheet => sheet.Properties.Title)
+            .Where(title => !string.IsNullOrWhiteSpace(title))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Reads the complete used range from several tabs in one API request. This
+    /// is substantially quicker than issuing one request per BG unit tab.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IList<IList<object>>>> ReadTabsAsync(
+        string spreadsheetId, IEnumerable<string> tabNames)
+    {
+        var tabs = tabNames
+            .Where(tab => !string.IsNullOrWhiteSpace(tab))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (tabs.Count == 0)
+            return new Dictionary<string, IList<IList<object>>>(
+                StringComparer.OrdinalIgnoreCase);
+
+        var svc = await GetServiceAsync();
+        var request = svc.Spreadsheets.Values.BatchGet(spreadsheetId);
+        request.Ranges = tabs
+            .Select(tab => $"'{tab.Replace("'", "''")}'")
+            .ToList();
+        var response = await request.ExecuteAsync();
+        var result = new Dictionary<string, IList<IList<object>>>(
+            StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < tabs.Count; index++)
+        {
+            var values = response.ValueRanges is not null && index < response.ValueRanges.Count
+                ? response.ValueRanges[index].Values
+                : null;
+            result[tabs[index]] = values ?? new List<IList<object>>();
+        }
+        return result;
+    }
+
     private async Task<IDictionary<string, int>> LoadTabsAsync(string spreadsheetId)
     {
         var svc = await GetServiceAsync();

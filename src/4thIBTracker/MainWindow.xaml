@@ -150,6 +150,8 @@
                                     Content="  Courses" Click="NavCourses_Click"/>
                             <Button x:Name="ForumCoursesNavButton" Style="{StaticResource NavButton}"
                                     Content="  NCO Courses" Click="NavForumCourses_Click"/>
+                            <Button x:Name="PromotionalCourseNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Promotional Course" Click="NavPromotionalCourse_Click"/>
                             <Button x:Name="CampaignMedalsNavButton" Style="{StaticResource NavButton}"
                                     Content="  Medals" Click="NavCampaignMedals_Click"/>
 

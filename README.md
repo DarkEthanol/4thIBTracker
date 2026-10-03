@@ -20,6 +20,12 @@ Built with C# / WPF (.NET 8), the Google Sheets API, and WebView2.
   app discovers website section links dynamically rather than relying on internal IDs.
 - **Courses** — the Section Courses matrix as a colour-coded grid with a
   "who still needs X" filter.
+- **Operation LOAs** — matches each personal LOA thread to the live platoon
+  ORBAT, including threads whose titles carry a date or other suffix.
+- **Latest Promotional Course** — discovers the current promotional-course
+  thread, lists its stated prerequisites and signups, then checks each signup
+  against every unit tab in the BG course tracker. Uncertain matches are shown
+  for review rather than treated as completed.
 - **Campaign Medals** — finds the highest medal currently earned but not yet
   recorded for each soldier in the configured platoon, cross-checked against
   the live SuT ORBAT.

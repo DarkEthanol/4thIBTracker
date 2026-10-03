@@ -476,6 +476,30 @@ Check(!wrongAuthorRoster.Single(group => group.Name == "2 Section").Members[0].I
       wrongAuthorRoster.Single(group => group.Name == "2 Section").Members[1].IsLoa,
     "reply in another member's thread does not mark the author as LOA");
 
+var datedTitleThread = new LoaThread(
+    "2 Section", "M. Atilla - LOA 2026", "https://unit.invalid/thread-302.html");
+var datedTitlePosts = ForumLoaService.ParsePosts("""
+    <div class="posts2 post classic" id="post_171121">
+      <span class="post_date"><span title="26-09-2026, 11:00 AM">Today</span></span>
+      <div class="post_body">Date: 26/09/2026<br>Reason: Work</div>
+    </div>
+    """, datedTitleThread);
+var datedTitleRoster = ForumLoaService.BuildRosterStatus(
+    datedTitlePosts,
+    [datedTitleThread],
+    new Dictionary<string, List<string>>
+    {
+        ["HQ"] = [], ["1 Section"] = [],
+        ["2 Section"] = ["Pte. M. Atilla"], ["3 Section"] = [],
+    },
+    new DateTime(2026, 9, 26));
+Check(ForumLoaService.ThreadTitleMatchesName(
+          "Pte. M. Atilla - 26/09/2026", "M. Atilla") &&
+      !ForumLoaService.ThreadTitleMatchesName("M. Atillan - 26/09/2026", "M. Atilla") &&
+      datedTitleRoster.Single(group => group.Name == "2 Section").Members[0] is
+          { HasThread: true, IsLoa: true },
+    "LOA thread title suffix is ignored without partial-name collisions");
+
 var loaOrbat = new Dictionary<string, List<string>>
 {
     ["HQ"] = ["N. Missing"],
@@ -500,6 +524,77 @@ var missingThreadMember = rosterStatus.Single(group => group.Name == "3 Section"
 Check(missingThreadMember.Name == "M. Sobczak" && missingThreadMember.IsLoa &&
       missingThreadMember.MissingThread,
     "missing personal LOA thread is reported independently of attendance state");
+
+var promotionalSource = """
+    <select><option value="16">Phase 2 &amp; 3 Training</option>
+    <option value="193">-- Promotional Courses</option></select>
+    """;
+Check(PromotionalCourseService.FindPromotionalForumUrl(
+          promotionalSource, "https://unit.invalid/forum-16.html") ==
+      "https://unit.invalid/forum-193.html",
+    "promotional-course forum is discovered rather than hard-coded");
+var latestPromotional = PromotionalCourseService.FindLatestThread("""
+    <a href="thread-200.html">Older course bumped today</a>
+    <span>Topic started by <a href="member.php?id=1">Trainer One</a></span>
+    <a href="thread-205.html">New promotional course</a>
+    <span>Topic started by <a href="member.php?id=2">Trainer Two</a></span>
+    """, "https://unit.invalid/forum-193.html");
+Check(latestPromotional?.Url == "https://unit.invalid/thread-205.html",
+    "latest promotional course uses creation order rather than last-reply bump order");
+
+var promotionalHtml = """
+    <div class="posts2 post classic" id="post_1">
+      <div class="post_body">To: All members<br>Date: 06/10/2026<br>
+      The following promotional courses are a prerequisite to this course:<br>
+      - L7A2 GPMG Course<br>- L2A1 ASM/ILAW Course<br>- K170A1 NLAW Course<br>
+      - Driving Course<br>- Signals Course<br>
+      All bids are to be placed by 04/10/2026.</div>
+    </div>
+    <div class="posts2 post classic" id="post_2">
+      <div class="post_body">Rank: Pte<br>Name: V. Example<br>
+      Position: Pointman<br>Section/Platoon: 4-1</div>
+    </div>
+    <div class="posts2 post classic" id="post_3">
+      <div class="post_body">Rank: Flt Lt<br>Name: D. Missing<br>
+      Position: JAC HQ 2IC<br>Section/Platoon: JAC HQ</div>
+    </div>
+    """;
+var promotionalInfo = PromotionalCourseService.ParseCourse(
+    new ForumThread(
+        "Potential Non-Commissioned Officer Course 10/26",
+        "https://unit.invalid/thread-47325.html", "Capt. T. Trainer", null),
+    [promotionalHtml]);
+Check(promotionalInfo.Prerequisites.Count == 5 &&
+      promotionalInfo.Signups.Count == 2 &&
+      promotionalInfo.DateText == "06/10/2026",
+    "promotional course details, prerequisites and signups parsing");
+
+var bgCourseRows = new List<IList<object>>
+{
+    new List<object> { "4-1" },
+    new List<object>(),
+    new List<object> { "", "Nr.", "Name/Rank", "ACMT", "L7A2 GPMG", "Basic AT", "Driving", "Signals" },
+    new List<object> { "", "1", "Pte. V. Example", "58", "Complete", "Complete", "Complete", "Complete" },
+};
+var bgCourseRecords = SheetParsers.ParseCourseRosterTab(bgCourseRows, "4 Platoon");
+var promotionalChecks = PromotionalCourseService.CheckCandidates(
+    promotionalInfo, bgCourseRecords);
+Check(bgCourseRecords.Count == 1 &&
+      promotionalChecks[0].OverallLabel == "Has prerequisites" &&
+      promotionalChecks[0].Prerequisites.All(item => item.Result == PrerequisiteResult.Met) &&
+      promotionalChecks[1].OverallLabel == "Needs review" &&
+      promotionalChecks[1].TrackerNote.Contains("Not found", StringComparison.OrdinalIgnoreCase),
+    "BG tracker eligibility check uses official Basic AT aggregation and flags unknown members");
+Check(PromotionalCourseService.MatchTrackerCourse(
+          "K170A1 NLAW Course", bgCourseRecords[0].Courses.Keys) == "Basic AT" &&
+      PromotionalCourseService.MatchTrackerCourse(
+          "L2A1 ASM/ILAW Course", bgCourseRecords[0].Courses.Keys) == "Basic AT",
+    "official Basic AT component courses map to the tracker badge column");
+Check(PromotionalCourseService.MatchTrackerCourse(
+          "Driving Course", ["Drivers", "Signals"]) == "Drivers" &&
+      PromotionalCourseService.MatchTrackerCourse(
+          "Drivers Course", ["Driving", "Signals"]) == "Driving",
+    "Driving and Drivers course headings are equivalent");
 
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,

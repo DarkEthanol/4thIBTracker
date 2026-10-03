@@ -195,6 +195,69 @@ public static class SheetParsers
         return (records, courseNames);
     }
 
+    /// <summary>
+    /// Reads every course block on one BG workbook tab. Unlike
+    /// <see cref="ParseCourses"/>, this deliberately does not filter by platoon:
+    /// callers use the tab title as the member's unit and combine all tabs.
+    /// Tabs that do not contain a course matrix simply return no records.
+    /// </summary>
+    public static List<CourseRecord> ParseCourseRosterTab(
+        IList<IList<object>> rows, string unitName)
+    {
+        static string Clean(string value) => Regex.Replace(value, @"\s+", " ").Trim();
+        static string HeaderKey(string value) =>
+            Regex.Replace(Clean(value).ToLowerInvariant(), @"[^a-z0-9]+", "");
+
+        var headers = new List<(int Row, int NameCol, int AcmtCol, List<(int Col, string Name)> Courses)>();
+        for (var row = 0; row < rows.Count; row++)
+        {
+            var nameCol = -1;
+            var acmtCol = -1;
+            for (var col = 0; col < rows[row].Count; col++)
+            {
+                var key = HeaderKey(S(rows[row], col));
+                if (key is "namerank" or "rankname") nameCol = col;
+                else if (key == "acmt") acmtCol = col;
+            }
+            if (nameCol < 0 || acmtCol < 0) continue;
+
+            var courses = new List<(int, string)>();
+            for (var col = acmtCol + 1; col < rows[row].Count; col++)
+            {
+                var course = Clean(S(rows[row], col));
+                if (course.Length > 0) courses.Add((col, course));
+            }
+            if (courses.Count > 0) headers.Add((row, nameCol, acmtCol, courses));
+        }
+
+        var records = new List<CourseRecord>();
+        for (var blockIndex = 0; blockIndex < headers.Count; blockIndex++)
+        {
+            var block = headers[blockIndex];
+            var endRow = blockIndex + 1 < headers.Count
+                ? headers[blockIndex + 1].Row
+                : rows.Count;
+            for (var row = block.Row + 1; row < endRow; row++)
+            {
+                var name = Clean(S(rows[row], block.NameCol));
+                if (name.Length == 0 || Regex.IsMatch(name,
+                        @"^(Vacant|Empty|N/?A|-)$", RegexOptions.IgnoreCase))
+                    continue;
+
+                var record = new CourseRecord
+                {
+                    Section = unitName,
+                    Name = name,
+                    Acmt = Clean(S(rows[row], block.AcmtCol)),
+                };
+                foreach (var course in block.Courses)
+                    record.Courses[course.Name] = Clean(S(rows[row], course.Col));
+                records.Add(record);
+            }
+        }
+        return records;
+    }
+
     // ---------------------------------------------------------------- Attendance
     public record AttendanceBlock(string Name, int NameCol0, int FirstWeekCol0, int FirstRow1, int LastRow1);
 

@@ -12,7 +12,8 @@ public record LoaPost(
     DateTime Date,
     string Reason,
     string Url,
-    DateTime PostedDate);
+    DateTime PostedDate,
+    bool UsesThreadOwner = false);
 public record LoaMemberRow(
     string Name,
     string Section,
@@ -79,7 +80,7 @@ public static partial class ForumLoaService
     private static readonly Regex ReasonLineRx = new(
         @"(?im)^\s*Reason\s*:\s*(?<value>[^\r\n]+)");
     private static readonly Regex RankPrefixRx = new(
-        @"^(?:(?:A/)?(?:Cpl|Sgt|SSgt|CSgt|WO\d?|LCpl)|Pte|Rct|2Lt|Lt|Capt|Maj|Col|Bdr|LBdr|Gnr|Tpr|LCpl\.|Cpl\.|Sgt\.|Pte\.)\s+",
+        @"^(?:(?:A/)?(?:LCpl|Cpl|Sgt|SSgt|CSgt|WO\d?)|Pte|Rct|2Lt|Lt|Capt|Maj|Col|Bdr|LBdr|Gnr|Tpr|Flt\s+Lt|Plt\s+Off|Fg\s+Off|Sqn\s+Ldr|Wg\s+Cdr|Gp\s+Capt|Air\s+Cdre|FS|SAC(?:\(T\))?|AS[12]|Cdt|OCdt)\.?\s+",
         RegexOptions.IgnoreCase);
 
     public static IReadOnlyList<LoaForumSection> FindLoaSections(
@@ -200,6 +201,7 @@ public static partial class ForumLoaService
             // The thread is the member's personal LOA record. Reply authors may
             // be NCOs posting in that thread, so only an explicit body name may
             // override the thread owner.
+            var usesThreadOwner = !HasExplicitPerson(body);
             var person = PersonFrom(body, thread.Title);
             if (person.Length == 0) continue;
             var reason = ReasonLineRx.Match(body) is { Success: true } reasonMatch
@@ -207,7 +209,8 @@ public static partial class ForumLoaService
                 : "";
             var postUrl = PostUrl(thread.Url, start.Groups["id"].Value);
             foreach (var date in DatesFrom(body, posted.Value))
-                posts.Add(new LoaPost(person, date, reason, postUrl, posted.Value));
+                posts.Add(new LoaPost(
+                    person, date, reason, postUrl, posted.Value, usesThreadOwner));
         }
         return posts;
     }
@@ -218,19 +221,10 @@ public static partial class ForumLoaService
         IReadOnlyDictionary<string, List<string>> orbat,
         DateTime selectedDate)
     {
-        var loaByMember = posts
+        var datedPosts = posts
             .Where(post => post.Date.Date == selectedDate.Date)
-            .Select(post => new { Post = post, Key = NormalizeName(post.Person) })
-            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(item => item.Post.PostedDate).First())
-            .ToDictionary(item => item.Key, item => item.Post, StringComparer.OrdinalIgnoreCase);
-
-        var threadByMember = threads
-            .Select(thread => new { Thread = thread, Key = NormalizeName(thread.Title) })
-            .Where(item => item.Key.Length > 0)
-            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First().Thread,
-                StringComparer.OrdinalIgnoreCase);
+            .ToList();
+        var threadList = threads.ToList();
 
         return SectionNames.Select(section => new LoaSectionGroup(
             section,
@@ -238,8 +232,20 @@ public static partial class ForumLoaService
                 .Select(name =>
                 {
                     var key = NormalizeName(name);
-                    var hasLoa = loaByMember.TryGetValue(key, out var loa);
-                    var hasThread = threadByMember.TryGetValue(key, out var thread);
+                    var thread = threadList.FirstOrDefault(candidate =>
+                        string.Equals(candidate.Section, section,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        ThreadTitleMatchesName(candidate.Title, name));
+                    var loa = datedPosts
+                        .Where(post =>
+                            string.Equals(NormalizeName(post.Person), key,
+                                StringComparison.OrdinalIgnoreCase) ||
+                            post.UsesThreadOwner && thread is not null &&
+                            SameThread(post.Url, thread.Url))
+                        .OrderByDescending(post => post.PostedDate)
+                        .FirstOrDefault();
+                    var hasLoa = loa is not null;
+                    var hasThread = thread is not null;
                     return new LoaMemberRow(
                         name,
                         section,
@@ -257,6 +263,23 @@ public static partial class ForumLoaService
         decoded = decoded.Replace('’', '\'');
         decoded = RankPrefixRx.Replace(decoded.Trim(), "");
         return Regex.Replace(decoded, @"\s+", " ").Trim().ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Personal LOA threads are sometimes titled "Name - date" or "Name notes".
+    /// Match the ORBAT name at the start of the title and deliberately ignore the
+    /// suffix, while retaining a boundary so similar surnames cannot collide.
+    /// </summary>
+    public static bool ThreadTitleMatchesName(string title, string rosterName)
+    {
+        var normalizedTitle = NormalizeName(title);
+        var normalizedName = NormalizeName(rosterName);
+        if (normalizedName.Length == 0 || normalizedTitle.Length < normalizedName.Length)
+            return false;
+        if (!normalizedTitle.StartsWith(normalizedName, StringComparison.OrdinalIgnoreCase))
+            return false;
+        return normalizedTitle.Length == normalizedName.Length ||
+               !char.IsLetterOrDigit(normalizedTitle[normalizedName.Length]);
     }
 
     private static IEnumerable<DateTime> DatesFrom(string body, DateTime postedDate)
@@ -332,6 +355,20 @@ public static partial class ForumLoaService
             return value;
         }
         return CleanField(author);
+    }
+
+    private static bool HasExplicitPerson(string body) =>
+        RankNameRx.IsMatch(body) || NameLineRx.IsMatch(body);
+
+    private static bool SameThread(string postUrl, string threadUrl)
+    {
+        static string ThreadId(string url) => Regex.Match(
+            new Uri(url).AbsolutePath,
+            @"thread-(?<id>\d+)", RegexOptions.IgnoreCase).Groups["id"].Value;
+
+        var postThread = ThreadId(postUrl);
+        return postThread.Length > 0 && string.Equals(
+            postThread, ThreadId(threadUrl), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CleanField(string value) =>

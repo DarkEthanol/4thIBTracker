@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private FillInsView? _fillIns;
     private LinksView? _links;
     private ForumCoursesView? _forumCourses;
+    private PromotionalCourseView? _promotionalCourse;
     private AddressView? _address;
     private TodoView? _todo;
     private PatrolReportsView? _patrolReports;
@@ -260,6 +261,11 @@ public partial class MainWindow : Window
         ShowPage(_forumCourses ??= new ForumCoursesView(new ForumCoursesViewModel(_sheets, _config)),
             ForumCoursesNavButton, "NCO Courses");
 
+    private void NavPromotionalCourse_Click(object sender, RoutedEventArgs e) =>
+        ShowPage(_promotionalCourse ??= new PromotionalCourseView(
+                new PromotionalCourseViewModel(_sheets, _config)),
+            PromotionalCourseNavButton, "Promotional Course");
+
     private void NavAddress_Click(object sender, RoutedEventArgs e) =>
         ShowPage(_address ??= new AddressView(new AddressViewModel(_sheets, _config)),
             AddressNavButton, "Sgt's Address");
@@ -333,6 +339,7 @@ public partial class MainWindow : Window
         _fillIns = null;
         _links = null;
         _forumCourses = null;
+        _promotionalCourse = null;
         _address = null;
         _patrolReports = null;
         _trainingReports = null;
