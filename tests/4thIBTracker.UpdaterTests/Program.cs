@@ -1,6 +1,8 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using FourthIBTracker.Models;
 using FourthIBTracker.Services;
 using FourthIBTracker.ViewModels;
@@ -45,6 +47,63 @@ Check(!platoonSettings.ExcludesOutstandingCourse("SERE Advanced"),
     "outstanding-course exclusion requires an exact name");
 Check(new AppConfig.PlatoonSection().OperationDayOfWeek == DayOfWeek.Saturday,
     "operation night defaults to Saturday");
+
+var legacyWebsiteSettings = JsonNode.Parse("""
+    {
+      "OrbatUrl": "https://4thib.co.uk/orbat.php",
+      "Forum": {
+        "CoursesForumUrl": "https://4thib.co.uk/forum-312.html",
+        "UpcomingForumUrl": "https://4thib.co.uk/forum-16.html",
+        "PatrolReportsForumUrl": "https://4thib.co.uk/forum-571.html",
+        "TrainingReportsForumUrl": "https://4thib.co.uk/forum-300.html",
+        "PlatoonForumUrl": "https://4thib.co.uk/forum-25.html",
+        "OperationsIndexUrl": "https://4thib.co.uk/index.php",
+        "PendingTransferForums": [
+          "https://4thib.co.uk/forum-76.html",
+          "https://4thib.co.uk/forum-79.html"
+        ],
+        "CompletedTransferForums": [
+          "https://4thib.co.uk/forum-77.html",
+          "https://4thib.co.uk/forum-80.html"
+        ]
+      }
+    }
+    """)!.AsObject();
+Check(AppConfig.MigrateLegacyWebsiteSettings(legacyWebsiteSettings),
+    "legacy website settings require migration");
+var migratedForums = legacyWebsiteSettings["Forum"]!.AsObject();
+Check(legacyWebsiteSettings["UnitWebsite"]!.GetValue<string>() == "https://4thib.co.uk" &&
+      migratedForums["CoursesForumId"]!.GetValue<string>() == "312" &&
+      migratedForums["TrainingReportsForumId"]!.GetValue<string>() == "300" &&
+      migratedForums["PlatoonForumId"]!.GetValue<string>() == "25",
+    "legacy full URLs migrate to a unit website and forum IDs");
+Check(migratedForums["PendingTransferForumIds"]!.AsArray()
+          .Select(value => value!.GetValue<string>()).SequenceEqual(["76", "79"]) &&
+      migratedForums["CompletedTransferForumIds"]!.AsArray()
+          .Select(value => value!.GetValue<string>()).SequenceEqual(["77", "80"]),
+    "legacy transfer forum URL lists migrate to ID lists");
+Check(!legacyWebsiteSettings.ContainsKey("OrbatUrl") &&
+      !migratedForums.ContainsKey("OperationsIndexUrl") &&
+      !migratedForums.ContainsKey("CoursesForumUrl") &&
+      !AppConfig.MigrateLegacyWebsiteSettings(legacyWebsiteSettings),
+    "legacy website keys are removed and migration is idempotent");
+
+var compactWebsiteConfig = new AppConfig { UnitWebsite = "4thib.co.uk/index.php" };
+compactWebsiteConfig.Forum.CoursesForumId = "312";
+compactWebsiteConfig.Forum.PlatoonForumId = "25";
+compactWebsiteConfig.Forum.PendingTransferForumIds = ["76", "79"];
+Check(compactWebsiteConfig.UnitWebsite == "https://4thib.co.uk" &&
+      compactWebsiteConfig.OrbatUrl == "https://4thib.co.uk/orbat.php" &&
+      compactWebsiteConfig.Forum.OperationsIndexUrl == "https://4thib.co.uk/index.php" &&
+      compactWebsiteConfig.Forum.CoursesForumUrl == "https://4thib.co.uk/forum-312.html" &&
+      compactWebsiteConfig.Forum.PendingTransferForums.SequenceEqual(
+          ["https://4thib.co.uk/forum-76.html", "https://4thib.co.uk/forum-79.html"]),
+    "compact website settings resolve the URLs used by existing modules");
+var compactWebsiteJson = JsonSerializer.Serialize(compactWebsiteConfig);
+Check(compactWebsiteJson.Contains("CoursesForumId", StringComparison.Ordinal) &&
+      !compactWebsiteJson.Contains("CoursesForumUrl", StringComparison.Ordinal) &&
+      !compactWebsiteJson.Contains("OrbatUrl", StringComparison.Ordinal),
+    "saved settings contain compact IDs rather than derived URLs");
 Check(LoaViewModel.NextOperationNight(
           new DateTime(2026, 10, 2), DayOfWeek.Saturday) == new DateTime(2026, 10, 3) &&
       LoaViewModel.NextOperationNight(

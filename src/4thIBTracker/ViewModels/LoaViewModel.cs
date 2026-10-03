@@ -44,12 +44,12 @@ public partial class LoaViewModel : ObservableObject
         var parentUrl = _config.Forum.PlatoonForumUrl.Trim();
         if (parentUrl.Length == 0 || parentUrl.Contains("PASTE", StringComparison.OrdinalIgnoreCase))
         {
-            Error = "Set the Platoon forum URL in Settings, then refresh.";
+            Error = "Set the Platoon LOA parent forum ID in Settings, then refresh.";
             return;
         }
         if (string.IsNullOrWhiteSpace(_config.OrbatUrl))
         {
-            Error = "Set the Website ORBAT URL in Settings, then refresh.";
+            Error = "Set the Unit website in Settings, then refresh.";
             return;
         }
 

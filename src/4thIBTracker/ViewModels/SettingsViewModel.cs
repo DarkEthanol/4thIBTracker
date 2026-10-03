@@ -42,16 +42,15 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string signOffPhrase = "";
 
     // URLs / IDs
-    [ObservableProperty] private string orbatUrl = "";
+    [ObservableProperty] private string unitWebsite = "";
     [ObservableProperty] private string fillInFormId = "";
-    [ObservableProperty] private string coursesForumUrl = "";
-    [ObservableProperty] private string upcomingForumUrl = "";
-    [ObservableProperty] private string patrolReportsForumUrl = "";
-    [ObservableProperty] private string trainingReportsForumUrl = "";
-    [ObservableProperty] private string platoonForumUrl = "";
-    [ObservableProperty] private string operationsIndexUrl = "";
-    [ObservableProperty] private string pendingTransferForums = "";
-    [ObservableProperty] private string completedTransferForums = "";
+    [ObservableProperty] private string coursesForumId = "";
+    [ObservableProperty] private string upcomingForumId = "";
+    [ObservableProperty] private string patrolReportsForumId = "";
+    [ObservableProperty] private string trainingReportsForumId = "";
+    [ObservableProperty] private string platoonForumId = "";
+    [ObservableProperty] private string pendingTransferForumIds = "";
+    [ObservableProperty] private string completedTransferForumIds = "";
 
     // Browser tabs: one per line, "Name | Url"
     [ObservableProperty] private string browserTabs = "";
@@ -86,16 +85,17 @@ public partial class SettingsViewModel : ObservableObject
             config.Platoon.OutstandingCourseExclusions);
         signOffPhrase = config.Platoon.SignOffPhrase;
 
-        orbatUrl = config.OrbatUrl;
+        unitWebsite = config.UnitWebsite;
         fillInFormId = config.FillInFormId;
-        coursesForumUrl = config.Forum.CoursesForumUrl;
-        upcomingForumUrl = config.Forum.UpcomingForumUrl;
-        patrolReportsForumUrl = config.Forum.PatrolReportsForumUrl;
-        trainingReportsForumUrl = config.Forum.TrainingReportsForumUrl;
-        platoonForumUrl = config.Forum.PlatoonForumUrl;
-        operationsIndexUrl = config.Forum.OperationsIndexUrl;
-        pendingTransferForums = string.Join(Environment.NewLine, config.Forum.PendingTransferForums);
-        completedTransferForums = string.Join(Environment.NewLine, config.Forum.CompletedTransferForums);
+        coursesForumId = config.Forum.CoursesForumId;
+        upcomingForumId = config.Forum.UpcomingForumId;
+        patrolReportsForumId = config.Forum.PatrolReportsForumId;
+        trainingReportsForumId = config.Forum.TrainingReportsForumId;
+        platoonForumId = config.Forum.PlatoonForumId;
+        pendingTransferForumIds = string.Join(Environment.NewLine,
+            config.Forum.PendingTransferForumIds);
+        completedTransferForumIds = string.Join(Environment.NewLine,
+            config.Forum.CompletedTransferForumIds);
 
         browserTabs = string.Join(Environment.NewLine,
             config.BrowserTabs.Select(t => $"{t.Name} | {t.Url}"));
@@ -176,6 +176,32 @@ public partial class SettingsViewModel : ObservableObject
                 return;
             }
 
+            var normalizedWebsite = AppConfig.NormalizeUnitWebsite(UnitWebsite);
+            if (UnitWebsite.Trim().Length > 0 && normalizedWebsite.Length == 0)
+            {
+                StatusMessage = "Unit website must be a valid HTTP or HTTPS address.";
+                return;
+            }
+            var forumIds = new[]
+            {
+                CoursesForumId, UpcomingForumId, PatrolReportsForumId,
+                TrainingReportsForumId, PlatoonForumId,
+            }.Concat(SplitList(PendingTransferForumIds, '\n'))
+             .Concat(SplitList(CompletedTransferForumIds, '\n'))
+             .Where(value => value.Trim().Length > 0)
+             .Select(AppConfig.ForumSection.NormalizeForumReference)
+             .ToList();
+            if (forumIds.Any(id => id.Length == 0))
+            {
+                StatusMessage = "Forum fields must contain numeric IDs (for example, 300).";
+                return;
+            }
+            if (forumIds.Count > 0 && normalizedWebsite.Length == 0)
+            {
+                StatusMessage = "Set the Unit website before adding forum IDs.";
+                return;
+            }
+
             _config.Platoon.Number = n;
             _config.Platoon.OperationDayOfWeek = OperationDayOfWeek;
             _config.Platoon.AddressFrom = AddressFrom.Trim();
@@ -185,16 +211,17 @@ public partial class SettingsViewModel : ObservableObject
                 SplitList(OutstandingCourseExclusions, ',');
             _config.Platoon.SignOffPhrase = SignOffPhrase.Trim();
 
-            _config.OrbatUrl = OrbatUrl.Trim();
+            _config.UnitWebsite = normalizedWebsite;
             _config.FillInFormId = FillInFormId.Trim();
-            _config.Forum.CoursesForumUrl = CoursesForumUrl.Trim();
-            _config.Forum.UpcomingForumUrl = UpcomingForumUrl.Trim();
-            _config.Forum.PatrolReportsForumUrl = PatrolReportsForumUrl.Trim();
-            _config.Forum.TrainingReportsForumUrl = TrainingReportsForumUrl.Trim();
-            _config.Forum.PlatoonForumUrl = PlatoonForumUrl.Trim();
-            _config.Forum.OperationsIndexUrl = OperationsIndexUrl.Trim();
-            _config.Forum.PendingTransferForums = SplitList(PendingTransferForums, '\n');
-            _config.Forum.CompletedTransferForums = SplitList(CompletedTransferForums, '\n');
+            _config.Forum.CoursesForumId = NormalizeForumId(CoursesForumId);
+            _config.Forum.UpcomingForumId = NormalizeForumId(UpcomingForumId);
+            _config.Forum.PatrolReportsForumId = NormalizeForumId(PatrolReportsForumId);
+            _config.Forum.TrainingReportsForumId = NormalizeForumId(TrainingReportsForumId);
+            _config.Forum.PlatoonForumId = NormalizeForumId(PlatoonForumId);
+            _config.Forum.PendingTransferForumIds = SplitList(PendingTransferForumIds, '\n')
+                .Select(NormalizeForumId).ToList();
+            _config.Forum.CompletedTransferForumIds = SplitList(CompletedTransferForumIds, '\n')
+                .Select(NormalizeForumId).ToList();
 
             foreach (var s in Sheets)
                 if (_config.Spreadsheets.TryGetValue(s.Key, out var sheet))
@@ -219,5 +246,8 @@ public partial class SettingsViewModel : ObservableObject
     private static List<string> SplitList(string text, char sep) =>
         text.Split(sep, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(s => s.Length > 0).ToList();
+
+    private static string NormalizeForumId(string value) =>
+        AppConfig.ForumSection.NormalizeForumReference(value);
 
 }

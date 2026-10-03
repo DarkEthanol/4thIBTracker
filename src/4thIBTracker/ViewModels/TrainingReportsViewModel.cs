@@ -87,7 +87,7 @@ public partial class TrainingReportsViewModel : ObservableObject
         var forumUrl = _config.Forum.TrainingReportsForumUrl.Trim();
         if (forumUrl.Length == 0 || forumUrl.Contains("PASTE", StringComparison.OrdinalIgnoreCase))
         {
-            Error = "Set Forum.TrainingReportsForumUrl in Settings.";
+            Error = "Set the Training reports forum ID in Settings.";
             return;
         }
 

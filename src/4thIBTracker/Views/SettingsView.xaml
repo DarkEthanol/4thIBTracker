@@ -196,8 +196,9 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Website ORBAT"/>
-                            <TextBox Grid.Column="1" Text="{Binding OrbatUrl}"/>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Unit website"/>
+                            <TextBox Grid.Column="1" Text="{Binding UnitWebsite}"
+                                     ToolTip="Base address only, for example https://4thib.co.uk. ORBAT, attendance and index pages are derived automatically."/>
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -212,26 +213,17 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Operations index page"/>
-                            <TextBox Grid.Column="1" Text="{Binding OperationsIndexUrl}"
-                                     ToolTip="The forum page listing the current Operation and the Archives — patrol reports are auto-discovered from here"/>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Patrol reports forum ID"/>
+                            <TextBox Grid.Column="1" Text="{Binding PatrolReportsForumId}"
+                                     ToolTip="Used if the patrol-report forum cannot be discovered from the unit website's operations index"/>
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Patrol reports (fallback)"/>
-                            <TextBox Grid.Column="1" Text="{Binding PatrolReportsForumUrl}"
-                                     ToolTip="Only used if the operations index isn't set"/>
-                        </Grid>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="230"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Training reports forum"/>
-                            <TextBox Grid.Column="1" Text="{Binding TrainingReportsForumUrl}"
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Training reports forum ID"/>
+                            <TextBox Grid.Column="1" Text="{Binding TrainingReportsForumId}"
                                      ToolTip="The single Training Reports archive; its page count is discovered automatically"/>
                         </Grid>
                         <Grid>
@@ -239,8 +231,8 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Platoon LOA parent forum"/>
-                            <TextBox Grid.Column="1" Text="{Binding PlatoonForumUrl}"
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Platoon LOA parent forum ID"/>
+                            <TextBox Grid.Column="1" Text="{Binding PlatoonForumId}"
                                      ToolTip="Set this separately for each platoon. Its HQ and section LOA forums are discovered automatically."/>
                         </Grid>
                         <Grid>
@@ -248,34 +240,34 @@
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Completed courses forum"/>
-                            <TextBox Grid.Column="1" Text="{Binding CoursesForumUrl}"/>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Completed courses forum ID"/>
+                            <TextBox Grid.Column="1" Text="{Binding CoursesForumId}"/>
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Upcoming courses forum"/>
-                            <TextBox Grid.Column="1" Text="{Binding UpcomingForumUrl}"/>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Upcoming courses forum ID"/>
+                            <TextBox Grid.Column="1" Text="{Binding UpcomingForumId}"/>
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Pending transfer forums"/>
-                            <TextBox Grid.Column="1" Text="{Binding PendingTransferForums}" AcceptsReturn="True"
-                                     MinHeight="48" ToolTip="One URL per line"/>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Pending transfer forum IDs"/>
+                            <TextBox Grid.Column="1" Text="{Binding PendingTransferForumIds}" AcceptsReturn="True"
+                                     MinHeight="48" ToolTip="One numeric forum ID per line"/>
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="230"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Completed transfer forums"/>
-                            <TextBox Grid.Column="1" Text="{Binding CompletedTransferForums}" AcceptsReturn="True"
-                                     MinHeight="48" ToolTip="One URL per line"/>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="Completed transfer forum IDs"/>
+                            <TextBox Grid.Column="1" Text="{Binding CompletedTransferForumIds}" AcceptsReturn="True"
+                                     MinHeight="48" ToolTip="One numeric forum ID per line"/>
                         </Grid>
                     </StackPanel>
                 </Border>

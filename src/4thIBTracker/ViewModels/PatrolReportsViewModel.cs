@@ -105,7 +105,7 @@ public partial class PatrolReportsViewModel : ObservableObject
                 return;
             }
             throw new InvalidOperationException(
-                "Set Forum.OperationsIndexUrl (the forum page listing Operations) in Settings.");
+                "Set the Unit website or Patrol reports forum ID in Settings.");
         }
 
         StatusMessage = "Finding operations…";
@@ -136,7 +136,7 @@ public partial class PatrolReportsViewModel : ObservableObject
 
         if (Operations.Count == 0)
             throw new InvalidOperationException(
-                "Couldn't find any operations on that page — check Forum.OperationsIndexUrl in Settings.");
+                "Couldn't find any operations on the unit website index page.");
         SelectedOperation = Operations[0];
     }
 
