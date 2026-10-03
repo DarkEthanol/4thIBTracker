@@ -47,7 +47,7 @@ foreach ($sheet in $settings.Spreadsheets.PSObject.Properties) {
         $privateValues.Add("Spreadsheets.$($sheet.Name).Tab")
     }
 }
-foreach ($name in @('FillInFormId', 'OrbatUrl')) {
+foreach ($name in @('FillInFormId', 'UnitWebsite')) {
     if (-not [string]::IsNullOrWhiteSpace([string]$settings.$name)) {
         $privateValues.Add($name)
     }
