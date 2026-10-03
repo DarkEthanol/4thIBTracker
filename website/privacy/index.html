@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy policy — 4thIB Tracker</title>
+  <meta name="description" content="How 4thIB Tracker accesses, uses, stores and shares Google user data.">
+  <meta name="theme-color" content="#0d1110">
+  <link rel="canonical" href="https://tracker.ethanolgaming.co.uk/privacy/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header"><nav class="nav" aria-label="Primary navigation"><a class="brand" href="/"><span class="brand-mark">4IB</span><span>4thIB Tracker</span></a><div class="nav-links"><a href="/">Home</a><a href="/privacy/" aria-current="page">Privacy</a><a href="/data/">Your data</a><a href="/terms/">Terms</a></div></nav></header>
+  <main id="content" class="prose">
+    <p class="eyebrow">Legal &amp; data use</p>
+    <h1>Privacy policy</h1>
+    <p class="updated">Effective 3 October 2026</p>
+
+    <div class="notice"><p><strong>In brief:</strong> 4thIB Tracker uses Google Sheets data only to provide its visible administrative features. OAuth tokens and app data remain on the user’s computer. Ethanol Gaming does not receive, sell or advertise against Google user data.</p></div>
+
+    <h2>1. Who operates 4thIB Tracker</h2>
+    <p>4thIB Tracker is an open-source Windows desktop application maintained by Ethanol Gaming. It is intended for authorised administrators of an organised gaming community. Questions about this policy can be raised through the project’s <a href="https://github.com/DarkEthanol/4thIBTracker/issues">public support and issue tracker</a>.</p>
+
+    <h2>2. Google user data the app accesses</h2>
+    <p>When a user chooses to connect Google, the app requests the Google Sheets scope shown below:</p>
+    <span class="code">https://www.googleapis.com/auth/spreadsheets</span>
+    <p>Google describes this scope as permission to see, edit, create and delete Google Sheets spreadsheets. 4thIB Tracker uses the scope more narrowly: it reads values from spreadsheets that the user has explicitly configured in the app and writes changes needed by its editable spreadsheet features. It does not intentionally create or delete spreadsheets, inspect unrelated spreadsheets, access Gmail, access contacts, or request general Google Drive file access.</p>
+    <p>Spreadsheet content may include attendance, training, qualifications, logistics, administrative notes and personnel names supplied by the organisation that controls each spreadsheet.</p>
+
+    <h2>3. How Google user data is used</h2>
+    <p>The app uses spreadsheet data only to provide user-facing functions visible in the desktop application, including:</p>
+    <ul>
+      <li>displaying configured administrative records;</li>
+      <li>calculating summaries and highlighting missing or inconsistent records;</li>
+      <li>preparing reports from those records; and</li>
+      <li>writing user-reviewed changes to configured spreadsheets when an editable feature is saved.</li>
+    </ul>
+    <p>Google user data is not used for advertising, credit decisions, surveillance, AI or machine-learning model training, or any unrelated purpose.</p>
+
+    <h2>4. Storage and retention</h2>
+    <h3>On the user’s computer</h3>
+    <p>Google access and refresh tokens are stored by the Google OAuth library inside the current Windows user’s <code>%APPDATA%\4thIBTracker</code> directory. Application settings, user-created tasks, selected report history and embedded-browser session data may also be stored locally. They remain until the user signs out, removes them, or deletes the application data.</p>
+    <h3>In memory</h3>
+    <p>Spreadsheet values are processed in memory while the app is running so that they can be displayed and compared. 4thIB Tracker does not operate a developer-controlled backend that stores copies of Google Sheets content.</p>
+    <h3>In Google Sheets</h3>
+    <p>Spreadsheet data remains in Google’s systems and is retained according to the policies of the spreadsheet owner and the relevant Google account or Workspace organisation.</p>
+
+    <h2>5. Sharing and transfers</h2>
+    <p>4thIB Tracker communicates directly between the user’s computer and Google’s APIs. Ethanol Gaming does not receive Google access tokens or spreadsheet content through a central application server. Google user data is not sold, rented, disclosed to advertisers, or transferred to data brokers. Data may be disclosed only where the user directs an operation, where required by law, or as necessary for Google to provide its API and spreadsheet services.</p>
+
+    <h2>6. Google API Limited Use</h2>
+    <p>4thIB Tracker’s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including its Limited Use requirements. Access is limited to delivering and improving prominent user-facing features of the app.</p>
+
+    <h2>7. Security</h2>
+    <p>Google authorisation takes place in the user’s normal browser. The app uses Google’s OAuth client libraries and HTTPS APIs. Tokens are kept within the user’s Windows profile and are not packaged with application releases. No method of storage or transmission is completely risk-free, so users should protect their Windows and Google accounts and revoke access if a device is lost or compromised.</p>
+
+    <h2>8. User choices and deletion</h2>
+    <p>Users can disconnect Google from <strong>Settings → Google Access → Sign out</strong>, revoke access from their Google Account, or remove locally stored app data. Full instructions are available on the <a href="/data/">data management and removal page</a>.</p>
+
+    <h2>9. Changes to this policy</h2>
+    <p>This policy will be updated if the app’s Google data use changes. The effective date at the top of this page identifies the current version. Material changes will be reflected in the application and its public source repository before expanded data use is introduced.</p>
+
+    <h2>10. Contact</h2>
+    <p>Privacy or data-use questions can be submitted through <a href="https://github.com/DarkEthanol/4thIBTracker/issues">GitHub Issues</a>. Do not include spreadsheet contents, OAuth tokens or other private information in a public issue.</p>
+  </main>
+  <footer class="site-footer"><div class="wrap footer-row"><div><strong>4thIB Tracker</strong><br>Maintained by Ethanol Gaming.</div><div class="footer-links"><a href="/">Home</a><a href="/privacy/">Privacy policy</a><a href="/terms/">Terms</a><a href="/data/">Data removal</a></div></div></footer>
+</body>
+</html>

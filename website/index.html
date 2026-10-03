@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>4thIB Tracker — Desktop administration for organised units</title>
+  <meta name="description" content="4thIB Tracker is an open-source Windows desktop application for attendance, training, courses and unit administration.">
+  <meta name="theme-color" content="#0d1110">
+  <link rel="canonical" href="https://tracker.ethanolgaming.co.uk/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <nav class="nav" aria-label="Primary navigation">
+      <a class="brand" href="/"><span class="brand-mark">4IB</span><span>4thIB Tracker</span></a>
+      <div class="nav-links">
+        <a href="#google-access">Google access</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/data/">Your data</a>
+        <a href="https://github.com/DarkEthanol/4thIBTracker">Source</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="content">
+    <section class="hero">
+      <div class="wrap">
+        <p class="eyebrow">Open-source Windows desktop application</p>
+        <h1>Unit administration without the spreadsheet shuffle.</h1>
+        <p class="lede">4thIB Tracker brings attendance, training, courses, logistics and routine reporting into one focused workspace for authorised community administrators.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/DarkEthanol/4thIBTracker/releases">View releases</a>
+          <a class="button" href="https://github.com/DarkEthanol/4thIBTracker">Review the source</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Purpose</p>
+            <h2>Built for the weekly admin rhythm</h2>
+          </div>
+          <p>The tracker presents information from user-configured workbooks and community pages in one desktop interface. It helps authorised users review records, prepare reports and apply deliberate updates without replacing the original data sources.</p>
+        </div>
+        <div class="grid">
+          <article class="card"><span class="number">01</span><h3>Review</h3><p>See attendance, personnel, course and logistics information in consistent, task-focused views.</p></article>
+          <article class="card"><span class="number">02</span><h3>Reconcile</h3><p>Compare configured records and surface missing, outstanding or mismatched information.</p></article>
+          <article class="card"><span class="number">03</span><h3>Update</h3><p>Apply supported spreadsheet changes only through visible user actions, including an explicit save step.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="google-access">
+      <div class="wrap">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Google Sheets access</p>
+            <h2>Consent first. Local by design.</h2>
+          </div>
+          <p>The tracker connects to Google only after a user selects <strong>Connect Google</strong> and approves access in their normal browser. The authorisation token is stored in that user’s Windows profile, not on an Ethanol Gaming server.</p>
+        </div>
+        <div class="scope">
+          <div class="card">
+            <h3>Why the permission is requested</h3>
+            <p>4thIB Tracker reads cell ranges from existing, user-configured spreadsheets to display administrative records. Where a feature is editable, it writes the user-reviewed changes back to those configured spreadsheets.</p>
+            <span class="code">https://www.googleapis.com/auth/spreadsheets</span>
+          </div>
+          <aside class="scope-note">
+            <h3>What the app does not do</h3>
+            <p>It does not sell Google user data, use it for advertising, train AI models with it, or copy spreadsheet content to the developer’s servers.</p>
+            <p><a href="/privacy/">Read the full privacy policy</a></p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Control</p>
+            <h2>The user stays in charge</h2>
+          </div>
+          <p>Access can be disconnected inside the app at any time. Users can also revoke the grant through their Google Account and remove all locally stored application data from their Windows profile.</p>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="/data/">Manage or remove your data</a>
+          <a class="button" href="https://github.com/DarkEthanol/4thIBTracker/issues">Get support</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-row">
+      <div><strong>4thIB Tracker</strong><br>Maintained by Ethanol Gaming.</div>
+      <div class="footer-links">
+        <a href="/privacy/">Privacy policy</a>
+        <a href="/terms/">Terms</a>
+        <a href="/data/">Data removal</a>
+        <a href="https://github.com/DarkEthanol/4thIBTracker">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

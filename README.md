@@ -1,5 +1,9 @@
 # 4thIB Tracker
 
+Project website: <https://tracker.ethanolgaming.co.uk/>
+
+Privacy policy: <https://tracker.ethanolgaming.co.uk/privacy/>
+
 A configurable desktop companion app for platoon administration. It replaces the pile of Google Sheets
 browser tabs with one window: native views for the things you check constantly
 (dashboard, attendance, courses, CEFO) plus embedded browser tabs for everything else.

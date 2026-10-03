@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage or remove your data — 4thIB Tracker</title>
+  <meta name="description" content="How to disconnect Google and remove data stored locally by 4thIB Tracker.">
+  <meta name="theme-color" content="#0d1110">
+  <link rel="canonical" href="https://tracker.ethanolgaming.co.uk/data/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header"><nav class="nav" aria-label="Primary navigation"><a class="brand" href="/"><span class="brand-mark">4IB</span><span>4thIB Tracker</span></a><div class="nav-links"><a href="/">Home</a><a href="/privacy/">Privacy</a><a href="/data/" aria-current="page">Your data</a><a href="/terms/">Terms</a></div></nav></header>
+  <main id="content" class="prose">
+    <p class="eyebrow">User control</p>
+    <h1>Manage or remove your data</h1>
+    <p class="updated">The tracker has no central user database. Account access and app data are controlled from your computer and Google Account.</p>
+
+    <h2>Disconnect Google from the app</h2>
+    <ol>
+      <li>Open 4thIB Tracker.</li>
+      <li>Open <strong>Settings</strong>.</li>
+      <li>Under <strong>Google Access</strong>, select <strong>Sign out</strong>.</li>
+    </ol>
+    <p>The app attempts to revoke the Google grant and removes its locally stored OAuth token. If Google is temporarily unavailable, local sign-out still completes.</p>
+
+    <h2>Revoke access through Google</h2>
+    <p>Visit <a href="https://myaccount.google.com/connections">Third-party connections in your Google Account</a>, select 4thIB Tracker, and remove its access. This invalidates the grant independently of the desktop app.</p>
+
+    <h2>Delete local application data</h2>
+    <p>Close the app, then delete the following directory from your Windows profile:</p>
+    <span class="code">%APPDATA%\4thIBTracker</span>
+    <p>This removes the OAuth token, app settings, user-created tasks, report history and embedded browser profile stored there. It does not delete any Google spreadsheets or records held by their owners.</p>
+
+    <h2>Correct or delete spreadsheet records</h2>
+    <p>4thIB Tracker does not own the spreadsheets it displays. Requests to correct or delete records held in a configured spreadsheet should be directed to that spreadsheet’s owner or the organisation responsible for it.</p>
+
+    <h2>Need help?</h2>
+    <p>Raise a request through <a href="https://github.com/DarkEthanol/4thIBTracker/issues">GitHub Issues</a> without including OAuth tokens, spreadsheet content or other private information.</p>
+  </main>
+  <footer class="site-footer"><div class="wrap footer-row"><div><strong>4thIB Tracker</strong><br>Maintained by Ethanol Gaming.</div><div class="footer-links"><a href="/">Home</a><a href="/privacy/">Privacy policy</a><a href="/terms/">Terms</a><a href="/data/">Data removal</a></div></div></footer>
+</body>
+</html>
