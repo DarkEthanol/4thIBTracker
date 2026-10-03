@@ -14,6 +14,12 @@ public partial class SheetEntryViewModel : ObservableObject
     [ObservableProperty] private string tab = "";
 }
 
+public partial class BrowserTabEntryViewModel : ObservableObject
+{
+    [ObservableProperty] private string name = "";
+    [ObservableProperty] private string url = "";
+}
+
 /// <summary>
 /// Edits the per-user appsettings.json and notifies the main window to rebuild
 /// any views that cache config-derived state.
@@ -52,13 +58,11 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string pendingTransferForumIds = "";
     [ObservableProperty] private string completedTransferForumIds = "";
 
-    // Browser tabs: one per line, "Name | Url"
-    [ObservableProperty] private string browserTabs = "";
-
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private string credentialsStatus = "";
 
     public ObservableCollection<SheetEntryViewModel> Sheets { get; } = new();
+    public ObservableCollection<BrowserTabEntryViewModel> BrowserTabs { get; } = new();
     public IReadOnlyList<DayOfWeek> OperationDays { get; } = Enum.GetValues<DayOfWeek>();
 
     public SettingsViewModel(AppConfig config, UpdateViewModel updates)
@@ -97,8 +101,12 @@ public partial class SettingsViewModel : ObservableObject
         completedTransferForumIds = string.Join(Environment.NewLine,
             config.Forum.CompletedTransferForumIds);
 
-        browserTabs = string.Join(Environment.NewLine,
-            config.BrowserTabs.Select(t => $"{t.Name} | {t.Url}"));
+        foreach (var tab in config.BrowserTabs)
+            BrowserTabs.Add(new BrowserTabEntryViewModel
+            {
+                Name = tab.Name,
+                Url = tab.Url,
+            });
 
         foreach (var (key, sheet) in config.Spreadsheets)
             Sheets.Add(new SheetEntryViewModel { Key = key, Id = sheet.Id, Tab = sheet.Tab });
@@ -160,6 +168,15 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void AddBrowserTab() => BrowserTabs.Add(new BrowserTabEntryViewModel());
+
+    [RelayCommand]
+    private void RemoveBrowserTab(BrowserTabEntryViewModel? tab)
+    {
+        if (tab is not null) BrowserTabs.Remove(tab);
+    }
+
+    [RelayCommand]
     private void Save()
     {
         try
@@ -202,6 +219,25 @@ public partial class SettingsViewModel : ObservableObject
                 return;
             }
 
+            var browserTabs = BrowserTabs
+                .Select(tab => new BrowserTab
+                {
+                    Name = tab.Name.Trim(),
+                    Url = tab.Url.Trim(),
+                })
+                .Where(tab => tab.Name.Length > 0 || tab.Url.Length > 0)
+                .ToList();
+            if (browserTabs.Any(tab => tab.Name.Length == 0 || tab.Url.Length == 0))
+            {
+                StatusMessage = "Each sidebar browser tab needs both a name and a URL.";
+                return;
+            }
+            if (browserTabs.Any(tab => !Uri.TryCreate(tab.Url, UriKind.Absolute, out _)))
+            {
+                StatusMessage = "Each sidebar browser tab needs a valid absolute URL.";
+                return;
+            }
+
             _config.Platoon.Number = n;
             _config.Platoon.OperationDayOfWeek = OperationDayOfWeek;
             _config.Platoon.AddressFrom = AddressFrom.Trim();
@@ -230,11 +266,7 @@ public partial class SettingsViewModel : ObservableObject
                     sheet.Tab = s.Tab;
                 }
 
-            _config.BrowserTabs = SplitList(BrowserTabs, '\n')
-                .Select(line => line.Split('|', 2))
-                .Where(p => p.Length == 2 && p[1].Trim().Length > 0)
-                .Select(p => new BrowserTab { Name = p[0].Trim(), Url = p[1].Trim() })
-                .ToList();
+            _config.BrowserTabs = browserTabs;
 
             _config.Save();
             SettingsSaved?.Invoke();
