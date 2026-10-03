@@ -20,6 +20,13 @@
     <AssemblyMetadata Include="UpdateRepository" Value="$(UpdateRepository)" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(GoogleOAuthClientId)' != '' and '$(GoogleOAuthClientSecret)' != ''">
+    <!-- Installed desktop apps cannot keep OAuth client metadata secret. The
+         publisher injects the shared client so users only need to sign in. -->
+    <AssemblyMetadata Include="GoogleOAuthClientId" Value="$(GoogleOAuthClientId)" />
+    <AssemblyMetadata Include="GoogleOAuthClientSecret" Value="$(GoogleOAuthClientSecret)" />
+  </ItemGroup>
+
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <!-- Keep release binaries free of developer-machine paths and PDB sidecars. -->
     <DebugType>None</DebugType>
@@ -42,10 +49,6 @@
 
   <ItemGroup>
     <None Update="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
-    </None>
-    <None Update="credentials.json" Condition="Exists('credentials.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>

@@ -280,7 +280,7 @@ public partial class MainWindow : Window
     {
         if (_settings == null)
         {
-            var vm = new SettingsViewModel(_config, _updateViewModel)
+            var vm = new SettingsViewModel(_config, _updateViewModel, _sheets)
             {
                 ConfirmApply = ConfirmSettingsApply,
             };
@@ -322,9 +322,8 @@ public partial class MainWindow : Window
         foreach (var browser in _browsers.Values) browser.Dispose();
         _browsers.Clear();
 
-        // Recreate the service and every config-backed page on next navigation.
-        // This is the in-process equivalent of the old restart workflow.
-        _sheets = new GoogleSheetsService(_config);
+        // Recreate every config-backed page on next navigation. The Sheets
+        // service is retained so its OAuth session also survives settings saves.
         _dashboard = null;
         _attendance = null;
         _loas = null;

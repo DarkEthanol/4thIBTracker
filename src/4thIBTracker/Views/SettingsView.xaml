@@ -138,13 +138,21 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource H2}" Text="GOOGLE ACCESS"/>
-                        <TextBlock Text="{Binding CredentialsStatus}" FontSize="13"
+                        <TextBlock Text="{Binding GoogleConnectionStatus}" FontSize="13"
                                    Foreground="{StaticResource TextDim}" TextWrapping="Wrap"
                                    Margin="0,0,0,8"/>
-                        <Button Content="Import / replace credentials.json…"
-                                HorizontalAlignment="Left" Padding="12,6"
-                                Command="{Binding ImportCredentialsCommand}"/>
-                        <TextBlock Text="The selected file is validated and copied to your Windows profile. Replacing it creates a backup and requires Google authorisation again."
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Connect Google" Padding="12,6"
+                                    Command="{Binding ConnectGoogleCommand}"/>
+                            <Button Content="Reconnect" Padding="12,6" Margin="8,0,0,0"
+                                    Command="{Binding ReconnectGoogleCommand}"/>
+                            <Button Content="Sign out" Padding="12,6" Margin="8,0,0,0"
+                                    Command="{Binding SignOutGoogleCommand}"/>
+                            <TextBlock Text="Working…" Margin="10,0,0,0"
+                                       Foreground="{StaticResource Accent}" VerticalAlignment="Center"
+                                       Visibility="{Binding IsGoogleBusy, Converter={StaticResource BooleanToVisibility}}"/>
+                        </StackPanel>
+                        <TextBlock Text="Google opens in your browser for consent. The app stores only your renewable authorization token in your Windows profile and keeps it across app updates."
                                    FontSize="12" Foreground="{StaticResource TextDim}"
                                    TextWrapping="Wrap" Margin="0,7,0,0"/>
                     </StackPanel>

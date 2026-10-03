@@ -72,7 +72,7 @@ public partial class UpdateViewModel : ObservableObject
         }
         if (MessageBox.Show(
                 $"Download version {AvailableVersion}, close the app and restart automatically?\n\n" +
-                "Your settings, credentials and todo list in AppData will not be changed.",
+                "Your settings, Google sign-in and todo list in AppData will not be changed.",
                 "Install update",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question) != MessageBoxResult.Yes)

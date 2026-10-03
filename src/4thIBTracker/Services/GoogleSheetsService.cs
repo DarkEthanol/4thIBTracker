@@ -1,5 +1,7 @@
 using System.IO;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
@@ -16,11 +18,72 @@ public class GoogleSheetsService
 {
     private readonly AppConfig _config;
     private SheetsService? _service;
+    private UserCredential? _credential;
     private readonly SemaphoreSlim _serviceInitLock = new(1, 1);
     private readonly Dictionary<string, Task<IDictionary<string, int>>> _sheetTabTasks = new();
     private readonly object _sheetTabTasksLock = new();
 
     public GoogleSheetsService(AppConfig config) => _config = config;
+
+    public bool IsOAuthConfigured => GoogleOAuthConfiguration.IsConfigured;
+    public bool HasStoredAuthorization => GoogleOAuthConfiguration.HasStoredAuthorization;
+
+    public async Task ConnectAsync() => await GetServiceAsync();
+
+    public async Task ReconnectAsync()
+    {
+        await DisconnectAsync(revoke: true);
+        await GetServiceAsync();
+    }
+
+    public async Task DisconnectAsync(bool revoke = true)
+    {
+        await _serviceInitLock.WaitAsync();
+        try
+        {
+            var store = new FileDataStore(
+                GoogleOAuthConfiguration.TokenDirectory, fullPath: true);
+            if (revoke && GoogleOAuthConfiguration.IsConfigured)
+            {
+                try
+                {
+                    var credential = _credential;
+                    if (credential is null)
+                    {
+                        var token = await store.GetAsync<TokenResponse>("user");
+                        if (token is not null)
+                        {
+                            var flow = new GoogleAuthorizationCodeFlow(
+                                new GoogleAuthorizationCodeFlow.Initializer
+                                {
+                                    ClientSecrets = GoogleOAuthConfiguration.GetClientSecrets(),
+                                    Scopes = [SheetsService.Scope.Spreadsheets],
+                                    DataStore = store,
+                                });
+                            credential = new UserCredential(flow, "user", token);
+                        }
+                    }
+                    if (credential is not null)
+                        await credential.RevokeTokenAsync(CancellationToken.None);
+                }
+                catch
+                {
+                    // Local sign-out must still work if Google is unreachable or
+                    // the remote grant was already revoked.
+                }
+            }
+
+            await store.DeleteAsync<TokenResponse>("user");
+            _service?.Dispose();
+            _service = null;
+            _credential = null;
+            lock (_sheetTabTasksLock) _sheetTabTasks.Clear();
+        }
+        finally
+        {
+            _serviceInitLock.Release();
+        }
+    }
 
     public async Task<SheetsService> GetServiceAsync()
     {
@@ -33,26 +96,17 @@ public class GoogleSheetsService
         {
             if (_service != null) return _service;
 
-            GoogleCredentialsService.EnsureMigrated();
-            var credPath = GoogleCredentialsService.CredentialsPath;
-            if (!File.Exists(credPath))
-                throw new FileNotFoundException(
-                    "Google credentials are not installed. Open Settings and choose " +
-                    $"‘Import credentials.json’. The per-user location is: {credPath}");
-
-            using var stream = new FileStream(credPath, FileMode.Open, FileAccess.Read);
-            var tokenDir = Path.GetDirectoryName(GoogleCredentialsService.CredentialsPath)!;
-
-            var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-                GoogleClientSecrets.FromStream(stream).Secrets,
+            Directory.CreateDirectory(GoogleOAuthConfiguration.TokenDirectory);
+            _credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+                GoogleOAuthConfiguration.GetClientSecrets(),
                 new[] { SheetsService.Scope.Spreadsheets },
                 "user",
                 CancellationToken.None,
-                new FileDataStore(tokenDir, fullPath: true));
+                new FileDataStore(GoogleOAuthConfiguration.TokenDirectory, fullPath: true));
 
             _service = new SheetsService(new BaseClientService.Initializer
             {
-                HttpClientInitializer = credential,
+                HttpClientInitializer = _credential,
                 ApplicationName = _config.Google.ApplicationName,
             });
             return _service;

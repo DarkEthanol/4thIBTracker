@@ -104,6 +104,28 @@ Check(compactWebsiteJson.Contains("CoursesForumId", StringComparison.Ordinal) &&
       !compactWebsiteJson.Contains("CoursesForumUrl", StringComparison.Ordinal) &&
       !compactWebsiteJson.Contains("OrbatUrl", StringComparison.Ordinal),
     "saved settings contain compact IDs rather than derived URLs");
+
+var previousOAuthClientId = Environment.GetEnvironmentVariable("GoogleOAuthClientId");
+var previousOAuthClientSecret = Environment.GetEnvironmentVariable("GoogleOAuthClientSecret");
+try
+{
+    Environment.SetEnvironmentVariable("GoogleOAuthClientId", "test-client-id");
+    Environment.SetEnvironmentVariable("GoogleOAuthClientSecret", "test-client-secret");
+    var oauthSecrets = GoogleOAuthConfiguration.GetClientSecrets();
+    Check(GoogleOAuthConfiguration.IsConfigured &&
+          oauthSecrets.ClientId == "test-client-id" &&
+          oauthSecrets.ClientSecret == "test-client-secret",
+        "desktop OAuth client can be supplied without a credentials file");
+}
+finally
+{
+    Environment.SetEnvironmentVariable("GoogleOAuthClientId", previousOAuthClientId);
+    Environment.SetEnvironmentVariable("GoogleOAuthClientSecret", previousOAuthClientSecret);
+}
+Check(GoogleOAuthConfiguration.TokenPath.EndsWith(
+          "Google.Apis.Auth.OAuth2.Responses.TokenResponse-user",
+          StringComparison.OrdinalIgnoreCase),
+    "desktop OAuth preserves the existing per-user refresh-token location");
 Check(LoaViewModel.NextOperationNight(
           new DateTime(2026, 10, 2), DayOfWeek.Saturday) == new DateTime(2026, 10, 3) &&
       LoaViewModel.NextOperationNight(

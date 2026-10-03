@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FourthIBTracker.Services;
-using Microsoft.Win32;
 
 namespace FourthIBTracker.ViewModels;
 
@@ -27,6 +25,7 @@ public partial class BrowserTabEntryViewModel : ObservableObject
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly AppConfig _config;
+    private readonly GoogleSheetsService _sheets;
 
     public UpdateViewModel Updates { get; }
 
@@ -59,26 +58,22 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string completedTransferForumIds = "";
 
     [ObservableProperty] private string statusMessage = "";
-    [ObservableProperty] private string credentialsStatus = "";
+    [ObservableProperty] private string googleConnectionStatus = "";
+    [ObservableProperty] private bool isGoogleBusy;
 
     public ObservableCollection<SheetEntryViewModel> Sheets { get; } = new();
     public ObservableCollection<BrowserTabEntryViewModel> BrowserTabs { get; } = new();
     public IReadOnlyList<DayOfWeek> OperationDays { get; } = Enum.GetValues<DayOfWeek>();
 
-    public SettingsViewModel(AppConfig config, UpdateViewModel updates)
+    public SettingsViewModel(
+        AppConfig config,
+        UpdateViewModel updates,
+        GoogleSheetsService sheets)
     {
         _config = config;
         Updates = updates;
-
-        try
-        {
-            GoogleCredentialsService.EnsureMigrated();
-            RefreshCredentialsStatus();
-        }
-        catch (Exception ex)
-        {
-            CredentialsStatus = $"Existing credentials could not be migrated: {ex.Message}";
-        }
+        _sheets = sheets;
+        RefreshGoogleConnectionStatus();
 
         platoonNumber = config.Platoon.Number.ToString();
         operationDayOfWeek = config.Platoon.OperationDayOfWeek;
@@ -112,59 +107,73 @@ public partial class SettingsViewModel : ObservableObject
             Sheets.Add(new SheetEntryViewModel { Key = key, Id = sheet.Id, Tab = sheet.Tab });
     }
 
-    [RelayCommand]
-    private void ImportCredentials()
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    private async Task ConnectGoogleAsync()
     {
-        var dialog = new OpenFileDialog
-        {
-            Title = "Choose Google OAuth credentials.json",
-            Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-            DefaultExt = ".json",
-            CheckFileExists = true,
-            Multiselect = false,
-        };
-        if (dialog.ShowDialog() != true) return;
-
+        IsGoogleBusy = true;
         try
         {
-            GoogleCredentialsService.Validate(dialog.FileName);
-
-            if (GoogleCredentialsService.Exists && MessageBox.Show(
-                    "Replace the installed Google credentials?\n\n" +
-                    "The current file will be backed up and you will be asked to " +
-                    "authorise Google again on the next sheet load.",
-                    "Replace Google credentials",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning) != MessageBoxResult.Yes)
-                return;
-
-            if (ConfirmApply != null && !ConfirmApply())
-            {
-                StatusMessage = "Credential import cancelled — existing unsaved work was kept.";
-                return;
-            }
-
-            var result = GoogleCredentialsService.Import(dialog.FileName);
-            RefreshCredentialsStatus();
-            SettingsSaved?.Invoke();
-
-            var backup = result.BackupPath is null
-                ? ""
-                : $" Previous credentials backed up to {result.BackupPath}.";
-            StatusMessage = "Google credentials installed. Open a Google-backed page " +
-                            "to authorise the account again." + backup;
+            await _sheets.ConnectAsync();
+            GoogleConnectionStatus = "Connected to Google. Authorization is stored in your " +
+                                     "Windows profile and refreshes automatically.";
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Credential import failed: {ex.Message}";
+            GoogleConnectionStatus = $"Google connection failed: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleBusy = false;
         }
     }
 
-    private void RefreshCredentialsStatus()
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    private async Task ReconnectGoogleAsync()
     {
-        CredentialsStatus = GoogleCredentialsService.Exists
-            ? $"Installed per-user: {GoogleCredentialsService.CredentialsPath}"
-            : "Not installed. Import the Desktop OAuth JSON downloaded from Google Cloud.";
+        IsGoogleBusy = true;
+        try
+        {
+            await _sheets.ReconnectAsync();
+            GoogleConnectionStatus = "Google authorization was renewed and stored in your " +
+                                     "Windows profile.";
+        }
+        catch (Exception ex)
+        {
+            GoogleConnectionStatus = $"Google reconnection failed: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleBusy = false;
+        }
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    private async Task SignOutGoogleAsync()
+    {
+        IsGoogleBusy = true;
+        try
+        {
+            await _sheets.DisconnectAsync();
+            RefreshGoogleConnectionStatus();
+        }
+        catch (Exception ex)
+        {
+            GoogleConnectionStatus = $"Google sign-out failed: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleBusy = false;
+        }
+    }
+
+    private void RefreshGoogleConnectionStatus()
+    {
+        GoogleConnectionStatus = !_sheets.IsOAuthConfigured
+            ? "Google OAuth is not configured in this development build. Official releases " +
+              "include the app's OAuth identity."
+            : _sheets.HasStoredAuthorization
+                ? "Connected to Google. The saved authorization refreshes automatically."
+                : "Not connected. Sign in once with a Google account that can access the configured sheets.";
     }
 
     [RelayCommand]

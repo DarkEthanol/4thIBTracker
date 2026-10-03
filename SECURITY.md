@@ -1,7 +1,7 @@
 # Security
 
-Do not open a public issue containing Google OAuth credentials, access tokens,
-spreadsheet IDs, personnel information, or private forum content.
+Do not open a public issue containing Google OAuth client values, user access or
+refresh tokens, spreadsheet IDs, personnel information, or private forum content.
 
 For security vulnerabilities, use GitHub's private vulnerability reporting for
 the repository. Revoke and replace any credential that has been posted publicly;

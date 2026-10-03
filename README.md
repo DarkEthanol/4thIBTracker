@@ -25,7 +25,7 @@ Built with C# / WPF (.NET 8), the Google Sheets API, and WebView2.
   per PDT date.
 - **In-app updates** — checks the project's public GitHub Releases, verifies the
   downloaded executable with SHA-256, replaces the running copy, and restarts
-  without touching settings, credentials, browser sessions, or todo data.
+  without touching settings, Google authorization, browser sessions, or todo data.
 - **Sheets (browser)** — any other sheet opens in an embedded WebView2 tab
   inside the app, with a persistent Google login.
 
@@ -39,27 +39,16 @@ Built with C# / WPF (.NET 8), the Google Sheets API, and WebView2.
 - Visual Studio 2022 (Community is fine, select the ".NET desktop development"
   workload) or VS Code with the C# Dev Kit.
 
-### 2. Create Google API credentials (~15 min, free)
+### 2. Connect Google
 
-1. Go to <https://console.cloud.google.com> and sign in with the Google account
-   that has access to the unit sheets.
-2. Create a new project (name it anything, e.g. `4thib-tracker`).
-3. **APIs & Services → Library** → search "Google Sheets API" → **Enable**.
-4. **APIs & Services → OAuth consent screen** → External → fill in the app name
-   and your email → add yourself as a **test user**. (Stays in testing mode —
-   that's fine for personal use.)
-5. **APIs & Services → Credentials → Create credentials → OAuth client ID** →
-   Application type: **Desktop app**.
-6. Download the JSON. In the app, open **Settings → Google Access** and choose
-   **Import / replace credentials.json**. For development, placing a file named
-   `credentials.json` in `src/4thIBTracker/` also works as a one-time migration
-   source.
+Official releases contain the app's shared desktop OAuth identity. Open
+**Settings → Google Access → Connect Google**, choose an account that can access
+the configured sheets, and approve the request in your browser. No credentials
+file or Google Cloud setup is required for individual users.
 
-The imported client file and the authorisation token are stored in
-`%APPDATA%\4thIBTracker`. The first sheet load opens a browser asking you to
-authorise the app; you won't be asked again unless the credentials are replaced.
-
-`credentials.json` and the token identify *you* — don't commit them or share them.
+The renewable user token is stored in `%APPDATA%\4thIBTracker` and remains there
+across in-place upgrades. **Reconnect** deliberately renews the grant; **Sign out**
+revokes it and removes the local token.
 
 ### 3. Point the app at your sheets
 
@@ -77,7 +66,7 @@ runtime copy is stored at `%APPDATA%\4thIBTracker\appsettings.json`:
   - `CampaignMedalOutcomes` and `CampaignMedalAwards` → the accumulated campaign
     medals workbook's `Outcomes` and `Accum Medals` tabs
 - Under `BrowserTabs`, paste full URLs for any sheets you want as embedded tabs.
-- `Forum.TrainingReportsForumUrl` points at the unit-wide Training Reports
+- `Forum.TrainingReportsForumId` identifies the unit-wide Training Reports
   archive. Its page count is discovered automatically, so it does not need to
   be updated as new archive pages are added.
 - Tab names must match the configured sheet's tab names exactly.
@@ -96,8 +85,8 @@ Or open `4thIBTracker.sln` in Visual Studio and press F5.
 Run `publish.cmd`. The checked publisher produces `publish\4thIBTracker.exe`
 and its SHA-256 checksum. The executable is self-contained and runs on any
 64-bit Windows machine without .NET installed. Users need only the executable;
-no configuration or credential sidecars are required. A fresh user imports
-their Google OAuth JSON from the Settings page.
+no configuration or credential sidecars are required. A fresh user signs in to
+Google from the Settings page.
 
 Editable platoon settings are stored at
 `%APPDATA%\4thIBTracker\appsettings.json`. On the first launch after upgrading
@@ -105,9 +94,6 @@ from an older version, the app copies the existing `appsettings.json` from next
 to the exe into that per-user location. Future upgrades can therefore replace
 only `4thIBTracker.exe` without overwriting the user's settings. New settings
 introduced by an update are merged in while all existing user values are kept.
-An existing sidecar `credentials.json` is likewise copied once to the per-user
-directory and is never overwritten by an executable upgrade.
-
 The exe is large (~150 MB) because it carries the whole .NET runtime. If the
 machine already has the .NET 8 Desktop Runtime, swap
 `--self-contained true` for `--self-contained false` to get a small exe instead.
@@ -117,6 +103,13 @@ machine already has the .NET 8 Desktop Runtime, swap
 GitHub Actions builds and publishes releases automatically. The repository must
 be public because installed apps read the public Releases API without storing a
 GitHub token.
+
+The repository must define `GOOGLE_OAUTH_CLIENT_ID` and
+`GOOGLE_OAUTH_CLIENT_SECRET` Actions secrets for one Google OAuth **Desktop app**
+client with the Sheets API enabled. Keep that same client between releases so
+existing refresh tokens remain valid. Set its OAuth audience to **Internal** for
+a single Workspace organisation, or publish the external consent screen to
+production; Google's testing status expires refresh tokens after seven days.
 
 1. Commit and push the finished changes to `main`.
 2. Create a three-part version tag and push it:
@@ -139,11 +132,15 @@ the app. Release tags and project versions use `MAJOR.MINOR.PATCH` format.
 For a checked local build, run:
 
 ```powershell
+$env:GOOGLE_OAUTH_CLIENT_ID = "your desktop client id"
+$env:GOOGLE_OAUTH_CLIENT_SECRET = "your desktop client secret"
 ./scripts/Publish-Release.ps1 -Version 1.0.0 -Repository owner/repository
 ```
 
-The local publisher refuses to run if credentials are present or embedded
-defaults contain unit-specific IDs, tabs, URLs, names, or browser links.
+The local publisher refuses to run without the shared OAuth client metadata, if
+credential files are present, or if embedded defaults contain unit-specific IDs,
+tabs, URLs, names, or browser links. Desktop OAuth client metadata is compiled
+into release executables; user refresh tokens are never included.
 
 ## Project layout
 

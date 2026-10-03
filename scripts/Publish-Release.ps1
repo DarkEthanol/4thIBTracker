@@ -35,6 +35,13 @@ if (-not [string]::IsNullOrWhiteSpace($Repository) -and
     throw "Repository must use owner/name format. Received: '$Repository'"
 }
 
+$googleOAuthClientId = [string]$env:GOOGLE_OAUTH_CLIENT_ID
+$googleOAuthClientSecret = [string]$env:GOOGLE_OAUTH_CLIENT_SECRET
+if ([string]::IsNullOrWhiteSpace($googleOAuthClientId) -or
+    [string]::IsNullOrWhiteSpace($googleOAuthClientSecret)) {
+    throw 'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required to publish a release.'
+}
+
 # Release defaults must never contain unit configuration. Existing users receive
 # their real settings from AppData, so blank embedded defaults are intentional.
 $settings = Get-Content -LiteralPath $defaultSettings -Raw | ConvertFrom-Json
@@ -130,6 +137,8 @@ $arguments = @(
 if (-not [string]::IsNullOrWhiteSpace($Repository)) {
     $arguments += "-p:UpdateRepository=$Repository"
 }
+$arguments += "-p:GoogleOAuthClientId=$googleOAuthClientId"
+$arguments += "-p:GoogleOAuthClientSecret=$googleOAuthClientSecret"
 
 & dotnet @arguments
 if ($LASTEXITCODE -ne 0) {
