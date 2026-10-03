@@ -80,6 +80,19 @@ dotnet run --project src/4thIBTracker
 
 Or open `4thIBTracker.sln` in Visual Studio and press F5.
 
+Local development builds intentionally do not contain the release OAuth client.
+Configure the same desktop client once for your Windows account, then build or
+run normally:
+
+```powershell
+[Environment]::SetEnvironmentVariable("GOOGLE_OAUTH_CLIENT_ID", "your desktop client id", "User")
+[Environment]::SetEnvironmentVariable("GOOGLE_OAUTH_CLIENT_SECRET", "your desktop client secret", "User")
+```
+
+These values are read directly from the user environment, so they do not enter
+the repository or require a local JSON file. Official release builds continue to
+receive the values from GitHub Actions secrets.
+
 ### 5. Single-exe build (optional)
 
 Run `publish.cmd`. The checked publisher produces `publish\4thIBTracker.exe`

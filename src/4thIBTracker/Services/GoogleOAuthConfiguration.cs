@@ -31,8 +31,8 @@ public static class GoogleOAuthConfiguration
             ? secrets
             : throw new InvalidOperationException(
                 "Google OAuth is not configured in this development build. " +
-                "Install an official release or provide the GoogleOAuthClientId and " +
-                "GoogleOAuthClientSecret build properties.");
+                "Install an official release or configure GOOGLE_OAUTH_CLIENT_ID and " +
+                "GOOGLE_OAUTH_CLIENT_SECRET for your Windows user.");
 
     private static bool TryGetClientSecrets(out ClientSecrets secrets)
     {
@@ -47,11 +47,9 @@ public static class GoogleOAuthConfiguration
         var clientId = metadata.GetValueOrDefault(ClientIdKey);
         var clientSecret = metadata.GetValueOrDefault(ClientSecretKey);
         if (string.IsNullOrWhiteSpace(clientId))
-            clientId = Environment.GetEnvironmentVariable(ClientIdKey) ??
-                       Environment.GetEnvironmentVariable("GOOGLE_OAUTH_CLIENT_ID") ?? "";
+            clientId = GetDevelopmentValue(ClientIdKey, "GOOGLE_OAUTH_CLIENT_ID");
         if (string.IsNullOrWhiteSpace(clientSecret))
-            clientSecret = Environment.GetEnvironmentVariable(ClientSecretKey) ??
-                           Environment.GetEnvironmentVariable("GOOGLE_OAUTH_CLIENT_SECRET") ?? "";
+            clientSecret = GetDevelopmentValue(ClientSecretKey, "GOOGLE_OAUTH_CLIENT_SECRET");
 
         secrets = new ClientSecrets
         {
@@ -59,5 +57,20 @@ public static class GoogleOAuthConfiguration
             ClientSecret = clientSecret.Trim(),
         };
         return secrets.ClientId.Length > 0 && secrets.ClientSecret.Length > 0;
+    }
+
+    private static string GetDevelopmentValue(string name, string alternateName)
+    {
+        var value = Environment.GetEnvironmentVariable(name) ??
+                    Environment.GetEnvironmentVariable(alternateName);
+        if (!string.IsNullOrWhiteSpace(value) || !OperatingSystem.IsWindows())
+            return value ?? "";
+
+        // Visual Studio and already-running terminals do not always inherit a
+        // newly configured user environment. Reading that scope directly makes
+        // the one-time development setup available immediately.
+        return Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User) ??
+               Environment.GetEnvironmentVariable(alternateName, EnvironmentVariableTarget.User) ??
+               "";
     }
 }
