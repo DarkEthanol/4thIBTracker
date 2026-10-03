@@ -48,8 +48,8 @@ Check(new AppConfig.PlatoonSection().OperationDayOfWeek == DayOfWeek.Saturday,
 Check(LoaViewModel.NextOperationNight(
           new DateTime(2026, 10, 2), DayOfWeek.Saturday) == new DateTime(2026, 10, 3) &&
       LoaViewModel.NextOperationNight(
-          new DateTime(2026, 10, 3), DayOfWeek.Saturday) == new DateTime(2026, 10, 10),
-    "LOA page chooses the next future operation night");
+          new DateTime(2026, 10, 3), DayOfWeek.Saturday) == new DateTime(2026, 10, 3),
+    "LOA page chooses this week's operation night, including today");
 
 Check(DashboardViewModel.ResolveNcoCourseStatus(
           sheetDone: true, forumCompleted: false, forumUpcoming: true) ==

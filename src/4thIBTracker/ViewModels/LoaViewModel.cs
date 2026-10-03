@@ -34,7 +34,6 @@ public partial class LoaViewModel : ObservableObject
     internal static DateTime NextOperationNight(DateTime from, DayOfWeek operationDay)
     {
         var daysAhead = ((int)operationDay - (int)from.DayOfWeek + 7) % 7;
-        if (daysAhead == 0) daysAhead = 7;
         return from.Date.AddDays(daysAhead);
     }
 
