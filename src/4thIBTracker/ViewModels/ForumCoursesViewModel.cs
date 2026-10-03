@@ -22,7 +22,6 @@ public partial class ForumCoursesViewModel : ObservableObject
     [ObservableProperty] private string? error;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private DateTime selectedMonth;
-    [ObservableProperty] private string ncoNamesDisplay = "";
 
     public ForumCoursesViewModel(GoogleSheetsService sheets, AppConfig config)
     {
@@ -31,7 +30,6 @@ public partial class ForumCoursesViewModel : ObservableObject
         var thisMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         for (int i = 0; i < 12; i++) MonthOptions.Add(thisMonth.AddMonths(-i));
         selectedMonth = thisMonth;
-        NcoNamesDisplay = "Loaded from the SuT tracker on scan.";
     }
 
     /// <summary>
@@ -60,7 +58,6 @@ public partial class ForumCoursesViewModel : ObservableObject
         _ncoNames = freshNames.Count > 0
             ? freshNames
             : _config.Forum.NcoNames.ToList();
-        NcoNamesDisplay = string.Join("  ·  ", _ncoNames);
     }
 
     private bool IsByNco(ForumThread t) => _ncoNames.Any(n =>

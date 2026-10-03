@@ -7,19 +7,7 @@
 
         <DockPanel Margin="20">
             <DockPanel DockPanel.Dock="Top">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource H1}" Text="Operation Night LOAs"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,-5,0,8">
-                        <Border Background="{StaticResource AccentDim}" CornerRadius="8"
-                                Padding="7,1" Margin="0,0,7,0">
-                            <TextBlock Text="READ ONLY" FontSize="10.5" FontWeight="Bold"
-                                       Foreground="{StaticResource Accent}"/>
-                        </Border>
-                        <TextBlock Text="Source: platoon LOA forums · current members and sections come from the website ORBAT"
-                                   Foreground="{StaticResource TextDim}" FontSize="13"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                </StackPanel>
+                <TextBlock Style="{StaticResource H1}" Text="Operation Night LOAs"/>
 
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             HorizontalAlignment="Right" VerticalAlignment="Top">

@@ -36,9 +36,6 @@ public partial class CampaignMedalsViewModel : ObservableObject
     [ObservableProperty] private string unmatchedMessage = "";
     [ObservableProperty] private string error = "";
 
-    public string Subtitle =>
-        $"Medals due for {_config.Platoon.Name}, cross-checked with the SuT ORBAT.";
-
     public CampaignMedalsViewModel(GoogleSheetsService sheets, AppConfig config)
     {
         _sheets = sheets;

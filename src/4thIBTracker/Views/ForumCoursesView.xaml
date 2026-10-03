@@ -20,11 +20,6 @@
                 </StackPanel>
             </DockPanel>
 
-            <TextBlock DockPanel.Dock="Top" Foreground="{StaticResource TextDim}" FontSize="13.5"
-                       Margin="0,0,0,8" TextWrapping="Wrap">
-                <Run Text="Watching for threads by: "/><Run Text="{Binding NcoNamesDisplay, Mode=OneWay}"
-                     FontWeight="SemiBold"/>
-            </TextBlock>
             <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}"
                        Foreground="{StaticResource Accent}" Margin="0,0,0,4"/>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Error}" TextWrapping="Wrap"

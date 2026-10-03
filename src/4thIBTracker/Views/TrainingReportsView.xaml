@@ -8,12 +8,7 @@
 
         <DockPanel Margin="20">
             <DockPanel DockPanel.Dock="Top">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource H1}" Text="Training Reports"/>
-                    <TextBlock Text="PDT reports for the configured platoon, grouped by month and training date."
-                               Foreground="{StaticResource TextDim}" FontSize="13"
-                               Margin="0,-5,0,8"/>
-                </StackPanel>
+                <TextBlock Style="{StaticResource H1}" Text="Training Reports"/>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             HorizontalAlignment="Right" VerticalAlignment="Top">
                     <ComboBox Width="185" Margin="0,0,8,0"
