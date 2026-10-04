@@ -69,6 +69,9 @@ public static partial class ForumLoaService
     private static readonly Regex NumericDateRx = new(
         @"(?<!\d)(?<day>\d{1,2})\s*[./-]\s*(?<month>\d{1,2})(?:\s*[./-]\s*(?<year>\d{2,4}))?(?!\d)",
         RegexOptions.IgnoreCase);
+    private static readonly Regex NamedMonthDateRx = new(
+        @"(?<!\d)(?<day>\d{1,2})(?:st|nd|rd|th)?\s+(?<month>Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+['’]?(?<year>\d{2,4})(?!\d)",
+        RegexOptions.IgnoreCase);
     private static readonly Regex RankNameRx = new(
         @"(?im)^\s*Rank\s*(?:and|&)\s*Name\s*:\s*(?<value>[^\r\n]+)");
     private static readonly Regex NameLineRx = new(
@@ -261,6 +264,11 @@ public static partial class ForumLoaService
     {
         var decoded = WebUtility.HtmlDecode(value).Normalize(NormalizationForm.FormC);
         decoded = decoded.Replace('’', '\'');
+        // Forum forms are completed by hand, so initials are sometimes joined
+        // to the surname ("A.Mandrake") or even to the rank
+        // ("Pte.A.Mandrake"). Canonicalise those boundaries before removing
+        // the optional rank so they match the spaced tracker/ORBAT spelling.
+        decoded = Regex.Replace(decoded, @"(?<=\p{L}\.)\s*(?=\p{L})", " ");
         decoded = RankPrefixRx.Replace(decoded.Trim(), "");
         return Regex.Replace(decoded, @"\s+", " ").Trim().ToLowerInvariant();
     }
@@ -300,7 +308,12 @@ public static partial class ForumLoaService
             .Where(date => date.HasValue)
             .Select(date => date!.Value.Date)
             .ToList();
-        foreach (var date in numeric) dates.Add(date);
+        var named = NamedMonthDateRx.Matches(source).Cast<Match>()
+            .Select(ParseNamedMonthDate)
+            .Where(date => date.HasValue)
+            .Select(date => date!.Value.Date)
+            .ToList();
+        foreach (var date in numeric.Concat(named)) dates.Add(date);
 
         if (numeric.Count == 2 && Regex.IsMatch(
                 source, @"\b(?:to|until|through)\b|\s[-–—]\s", RegexOptions.IgnoreCase))
@@ -324,6 +337,21 @@ public static partial class ForumLoaService
         if (match.Groups["year"].Success && int.TryParse(match.Groups["year"].Value, out var parsedYear))
             year = parsedYear < 100 ? 2000 + parsedYear : parsedYear;
         try { return new DateTime(year, month, day); }
+        catch (ArgumentOutOfRangeException) { return null; }
+    }
+
+    private static DateTime? ParseNamedMonthDate(Match match)
+    {
+        var monthText = match.Groups["month"].Value;
+        if (!int.TryParse(match.Groups["day"].Value, out var day) ||
+            !int.TryParse(match.Groups["year"].Value, out var year) ||
+            monthText.Length < 3 ||
+            !DateTime.TryParseExact(monthText[..3], "MMM", CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces, out var month))
+            return null;
+
+        if (year < 100) year += 2000;
+        try { return new DateTime(year, month.Month, day); }
         catch (ArgumentOutOfRangeException) { return null; }
     }
 

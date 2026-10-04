@@ -449,6 +449,30 @@ Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "a. foi
 Check(loaPosts.Count(post => ForumLoaService.NormalizeName(post.Person) == "b. lucas") == 3,
     "multiple abbreviated LOA dates parsing");
 
+var resilientLoaDates = ForumLoaService.ParsePosts("""
+    <div class="posts2 post classic" id="post_171117">
+      <span class="post_date">03-10-2026, 12:00 PM</span>
+      <div class="post_body">Date: 03 Oct '26</div>
+    </div>
+    <div class="posts2 post classic" id="post_171118">
+      <span class="post_date">04-10-2026, 12:00 PM</span>
+      <div class="post_body">Date: 04.10.2026</div>
+    </div>
+    <div class="posts2 post classic" id="post_171119">
+      <span class="post_date">04-10-2026, 12:00 PM</span>
+      <div class="post_body">Date: 04/10/2026</div>
+    </div>
+    <div class="posts2 post classic" id="post_171120">
+      <span class="post_date">04-10-2026, 12:00 PM</span>
+      <div class="post_body">Date: 04-10-2026</div>
+    </div>
+    """, new LoaThread(
+        "1 Section", "A. Example", "https://unit.invalid/thread-102.html"));
+Check(resilientLoaDates.Count == 4 &&
+      resilientLoaDates.Count(post => post.Date == new DateTime(2026, 10, 3)) == 1 &&
+      resilientLoaDates.Count(post => post.Date == new DateTime(2026, 10, 4)) == 3,
+    "LOA dates accept named, dotted, slashed and dashed formats");
+
 var wrongAuthorPost = ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171120">
       <a href="user-202.html">LCpl. A. Foica</a>
@@ -585,6 +609,21 @@ Check(bgCourseRecords.Count == 1 &&
       promotionalChecks[1].OverallLabel == "Needs review" &&
       promotionalChecks[1].TrackerNote.Contains("Not found", StringComparison.OrdinalIgnoreCase),
     "BG tracker eligibility check uses official Basic AT aggregation and flags unknown members");
+var joinedInitialCourse = promotionalInfo with
+{
+    Signups =
+    [
+        new PromotionalCourseSignup(
+            "Pte", "V.Example", "Pointman", "4-1",
+            "https://unit.invalid/thread-47325-post-4.html#pid4"),
+    ],
+};
+var joinedInitialChecks = PromotionalCourseService.CheckCandidates(
+    joinedInitialCourse, bgCourseRecords);
+Check(ForumLoaService.NormalizeName("Pte.V.Example") ==
+          ForumLoaService.NormalizeName("Pte. V. Example") &&
+      joinedInitialChecks.Single().OverallLabel == "Has prerequisites",
+    "joined initials and rank punctuation match spaced BG tracker names");
 Check(PromotionalCourseService.MatchTrackerCourse(
           "K170A1 NLAW Course", bgCourseRecords[0].Courses.Keys) == "Basic AT" &&
       PromotionalCourseService.MatchTrackerCourse(
