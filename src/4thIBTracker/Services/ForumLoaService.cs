@@ -79,7 +79,7 @@ public static partial class ForumLoaService
     private static readonly Regex RankLineRx = new(
         @"(?im)^\s*Rank\s*:\s*(?<value>[^\r\n]+)");
     private static readonly Regex DateLineRx = new(
-        @"(?im)^\s*Date(?:\(s\)|s)?\s*:\s*(?<value>[^\r\n]+)");
+        @"(?im)^\s*Date(?:\(s\)|s)?(?:\s+of\s+LOA)?\s*:\s*(?<value>[^\r\n]+)");
     private static readonly Regex ReasonLineRx = new(
         @"(?im)^\s*Reason\s*:\s*(?<value>[^\r\n]+)");
     private static readonly Regex RankPrefixRx = new(
@@ -196,7 +196,7 @@ public static partial class ForumLoaService
             // slashes. Only turn a slash into a line break when another known
             // field label follows, so ranks such as A/Sgt remain intact.
             body = Regex.Replace(body,
-                @"\s*/\s*(?=(?:Rank(?:\s+(?:and|&)\s+Name)?|Name|Date(?:\(s\)|s)?|Reason)\s*:)",
+                @"\s*/\s*(?=(?:Rank(?:\s+(?:and|&)\s+Name)?|Name|Date(?:\(s\)|s)?(?:\s+of\s+LOA)?|Reason)\s*:)",
                 "\n", RegexOptions.IgnoreCase);
             var posted = ParsePostedDate(PostDateRx.Match(block).Groups["date"].Value);
             if (posted is null) continue;

@@ -473,6 +473,32 @@ Check(resilientLoaDates.Count == 4 &&
       resilientLoaDates.Count(post => post.Date == new DateTime(2026, 10, 4)) == 3,
     "LOA dates accept named, dotted, slashed and dashed formats");
 
+var labelledLoaThread = new LoaThread(
+    "1 Section", "Adrian C.", "https://unit.invalid/thread-103.html");
+var labelledLoaPost = ForumLoaService.ParsePosts("""
+    <div class="posts2 post classic" id="post_171121">
+      <span class="post_date">04-10-2026, 12:00 PM</span>
+      <div class="post_body">Name: Adrian C.<br>Rank: Pte.<br>
+      Date(s) of LOA: 04.10.2026<br>Reason: Out of home for the weekend</div>
+    </div>
+    """, labelledLoaThread);
+var labelledLoaRoster = ForumLoaService.BuildRosterStatus(
+    labelledLoaPost,
+    [labelledLoaThread],
+    new Dictionary<string, List<string>>
+    {
+        ["HQ"] = [], ["1 Section"] = ["Pte. Adrian C."],
+        ["2 Section"] = [], ["3 Section"] = [],
+    },
+    new DateTime(2026, 10, 4));
+Check(labelledLoaPost.Single() is
+          { Person: "Pte. Adrian C.", Date: var labelledDate,
+            Reason: "Out of home for the weekend" } &&
+      labelledDate == new DateTime(2026, 10, 4) &&
+      labelledLoaRoster.Single(group => group.Name == "1 Section").Members.Single() is
+          { IsLoa: true },
+    "Date(s) of LOA label creates a dated roster LOA record");
+
 var wrongAuthorPost = ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171120">
       <a href="user-202.html">LCpl. A. Foica</a>
