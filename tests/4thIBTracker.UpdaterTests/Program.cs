@@ -412,37 +412,45 @@ Check(ForumLoaService.LastThreadPage(
           "https://unit.invalid/thread-101-page-3.html",
     "LOA thread pagination discovery");
 
-var loaPostsHtml = """
+var loaPosts = new List<LoaPost>();
+loaPosts.AddRange(ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171113">
       <a href="user-200.html">Cpl. C. Morgan</a>
       <span class="post_date"><span title="25-09-2026, 04:50 PM">Yesterday</span>, 04:50 PM</span>
       <div class="post_body scaleimages">tomorrow<br><br>ruggers</div>
     </div>
+    """, new LoaThread(
+        "1 Section", "C. Morgan", "https://unit.invalid/thread-201.html")));
+loaPosts.AddRange(ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171114">
       <a href="user-201.html">A/Cpl. C. Rhodes</a>
       <span class="post_date">09-09-2026, 12:00 PM</span>
       <div class="post_body">Name: M. Sobczak<br>Rank: Pte.<br>Date: 26/09/26<br>Reason: Away</div>
     </div>
+    """, new LoaThread(
+        "3 Section", "M. Sobczak", "https://unit.invalid/thread-204.html")));
+loaPosts.AddRange(ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171115">
       <a href="user-202.html">LCpl. A. Foica</a>
       <span class="post_date">20-09-2026, 12:00 PM</span>
       <div class="post_body">Rank and Name: LCpl. A. Foica / Date(s): 26.09.2026 / Reason: Work</div>
     </div>
+    """, new LoaThread(
+        "2 Section", "A. Foica", "https://unit.invalid/thread-202.html")));
+loaPosts.AddRange(ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171116">
       <a href="user-203.html">Pte. B. Lucas</a>
       <span class="post_date">01-07-2026, 12:00 PM</span>
       <div class="post_body">Name: B. Lucas<br>Rank: Pte.<br>Date(s): 12.7, 19.7 and 26.7</div>
     </div>
-    """;
-var loaPosts = ForumLoaService.ParsePosts(
-    loaPostsHtml, new LoaThread(
-        "1 Section", "C. Morgan", "https://unit.invalid/thread-101.html"));
+    """, new LoaThread(
+        "2 Section", "B. Lucas", "https://unit.invalid/thread-203.html")));
 Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "c. morgan" &&
                            post.Date == new DateTime(2026, 9, 26)),
     "relative LOA date resolved against forum post date");
 Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "m. sobczak" &&
                            post.Date == new DateTime(2026, 9, 26) && post.Reason == "Away"),
-    "on-behalf LOA identity and two-digit date parsing");
+    "personal thread identity and two-digit date parsing");
 Check(loaPosts.Any(post => ForumLoaService.NormalizeName(post.Person) == "a. foica" &&
                            post.Date == new DateTime(2026, 9, 26) && post.Reason == "Work"),
     "single-line LOA template and dotted date parsing");
@@ -474,7 +482,7 @@ Check(resilientLoaDates.Count == 4 &&
     "LOA dates accept named, dotted, slashed and dashed formats");
 
 var labelledLoaThread = new LoaThread(
-    "1 Section", "Adrian C.", "https://unit.invalid/thread-103.html");
+    "1 Section", "C. Adrian", "https://unit.invalid/thread-103.html");
 var labelledLoaPost = ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171121">
       <span class="post_date">04-10-2026, 12:00 PM</span>
@@ -487,23 +495,24 @@ var labelledLoaRoster = ForumLoaService.BuildRosterStatus(
     [labelledLoaThread],
     new Dictionary<string, List<string>>
     {
-        ["HQ"] = [], ["1 Section"] = ["Pte. Adrian C."],
+        ["HQ"] = [], ["1 Section"] = ["Pte. C. Adrian"],
         ["2 Section"] = [], ["3 Section"] = [],
     },
     new DateTime(2026, 10, 4));
 Check(labelledLoaPost.Single() is
-          { Person: "Pte. Adrian C.", Date: var labelledDate,
+          { Person: "C. Adrian", Date: var labelledDate,
             Reason: "Out of home for the weekend" } &&
       labelledDate == new DateTime(2026, 10, 4) &&
       labelledLoaRoster.Single(group => group.Name == "1 Section").Members.Single() is
           { IsLoa: true },
-    "Date(s) of LOA label creates a dated roster LOA record");
+    "personal thread owner overrides a backwards Name field");
 
 var wrongAuthorPost = ForumLoaService.ParsePosts("""
     <div class="posts2 post classic" id="post_171120">
       <a href="user-202.html">LCpl. A. Foica</a>
       <span class="post_date"><span title="26-09-2026, 11:00 AM">2 hours ago</span></span>
-      <div class="post_body">Date: 26/09/2026<br>Reason: Dinner</div>
+      <div class="post_body">Name: A. Foica<br>Rank: LCpl.<br>
+      Date: 26/09/2026<br>Reason: Dinner</div>
     </div>
     """, new LoaThread(
         "2 Section", "M. Atilla", "https://unit.invalid/thread-300.html"));
@@ -524,7 +533,7 @@ var wrongAuthorRoster = ForumLoaService.BuildRosterStatus(
     new DateTime(2026, 9, 26));
 Check(!wrongAuthorRoster.Single(group => group.Name == "2 Section").Members[0].IsLoa &&
       wrongAuthorRoster.Single(group => group.Name == "2 Section").Members[1].IsLoa,
-    "reply in another member's thread does not mark the author as LOA");
+    "reply body name cannot override the personal thread owner");
 
 var datedTitleThread = new LoaThread(
     "2 Section", "M. Atilla - LOA 2026", "https://unit.invalid/thread-302.html");
@@ -562,6 +571,7 @@ var rosterThreads = new List<LoaThread>
     new("1 Section", "C. Morgan", "https://unit.invalid/thread-201.html"),
     new("2 Section", "A. Foica", "https://unit.invalid/thread-202.html"),
     new("2 Section", "B. Lucas", "https://unit.invalid/thread-203.html"),
+    new("3 Section", "M. Sobczak", "https://unit.invalid/thread-204.html"),
 };
 var rosterStatus = ForumLoaService.BuildRosterStatus(
     loaPosts, rosterThreads, loaOrbat, new DateTime(2026, 9, 26));
@@ -570,10 +580,10 @@ Check(rosterStatus.SelectMany(group => group.Members).Count() == 5 &&
       !rosterStatus.Single(group => group.Name == "2 Section").Members[1].IsLoa &&
       rosterStatus.Single(group => group.Name == "HQ").Members[0].StatusLabel == "No thread",
     "full ORBAT roster reports LOA and attending states");
-var missingThreadMember = rosterStatus.Single(group => group.Name == "3 Section").Members[0];
-Check(missingThreadMember.Name == "M. Sobczak" && missingThreadMember.IsLoa &&
+var missingThreadMember = rosterStatus.Single(group => group.Name == "HQ").Members[0];
+Check(missingThreadMember.Name == "N. Missing" && !missingThreadMember.IsLoa &&
       missingThreadMember.MissingThread,
-    "missing personal LOA thread is reported independently of attendance state");
+    "ORBAT member without a personal thread is reported");
 
 var promotionalSource = """
     <select><option value="16">Phase 2 &amp; 3 Training</option>

@@ -12,8 +12,7 @@ public record LoaPost(
     DateTime Date,
     string Reason,
     string Url,
-    DateTime PostedDate,
-    bool UsesThreadOwner = false);
+    DateTime PostedDate);
 public record LoaMemberRow(
     string Name,
     string Section,
@@ -43,8 +42,8 @@ public record LoaSectionGroup(string Name, IReadOnlyList<LoaMemberRow> Members)
 /// <summary>
 /// Parses the platoon forum's dynamically linked LOA areas. The forum is not a
 /// database: members reuse personal threads and post in several different date
-/// formats. Each reply is a record in the member named by the personal thread;
-/// an explicit name in the reply body takes precedence for on-behalf posts.
+/// formats. Every reply belongs to the member named by its personal thread;
+/// names in the post body and the reply author are deliberately ignored.
 /// </summary>
 public static partial class ForumLoaService
 {
@@ -72,12 +71,6 @@ public static partial class ForumLoaService
     private static readonly Regex NamedMonthDateRx = new(
         @"(?<!\d)(?<day>\d{1,2})(?:st|nd|rd|th)?\s+(?<month>Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+['’]?(?<year>\d{2,4})(?!\d)",
         RegexOptions.IgnoreCase);
-    private static readonly Regex RankNameRx = new(
-        @"(?im)^\s*Rank\s*(?:and|&)\s*Name\s*:\s*(?<value>[^\r\n]+)");
-    private static readonly Regex NameLineRx = new(
-        @"(?im)^\s*Name\s*:\s*(?<value>[^\r\n]+)");
-    private static readonly Regex RankLineRx = new(
-        @"(?im)^\s*Rank\s*:\s*(?<value>[^\r\n]+)");
     private static readonly Regex DateLineRx = new(
         @"(?im)^\s*Date(?:\(s\)|s)?(?:\s+of\s+LOA)?\s*:\s*(?<value>[^\r\n]+)");
     private static readonly Regex ReasonLineRx = new(
@@ -201,11 +194,9 @@ public static partial class ForumLoaService
             var posted = ParsePostedDate(PostDateRx.Match(block).Groups["date"].Value);
             if (posted is null) continue;
 
-            // The thread is the member's personal LOA record. Reply authors may
-            // be NCOs posting in that thread, so only an explicit body name may
-            // override the thread owner.
-            var usesThreadOwner = !HasExplicitPerson(body);
-            var person = PersonFrom(body, thread.Title);
+            // Personal threads are authoritative. The reply author or a typed
+            // Name field may be wrong, reversed, or copied from another format.
+            var person = CleanField(thread.Title);
             if (person.Length == 0) continue;
             var reason = ReasonLineRx.Match(body) is { Success: true } reasonMatch
                 ? CleanField(reasonMatch.Groups["value"].Value)
@@ -213,7 +204,7 @@ public static partial class ForumLoaService
             var postUrl = PostUrl(thread.Url, start.Groups["id"].Value);
             foreach (var date in DatesFrom(body, posted.Value))
                 posts.Add(new LoaPost(
-                    person, date, reason, postUrl, posted.Value, usesThreadOwner));
+                    person, date, reason, postUrl, posted.Value));
         }
         return posts;
     }
@@ -234,17 +225,13 @@ public static partial class ForumLoaService
             orbat.GetValueOrDefault(section, [])
                 .Select(name =>
                 {
-                    var key = NormalizeName(name);
                     var thread = threadList.FirstOrDefault(candidate =>
                         string.Equals(candidate.Section, section,
                             StringComparison.OrdinalIgnoreCase) &&
                         ThreadTitleMatchesName(candidate.Title, name));
                     var loa = datedPosts
-                        .Where(post =>
-                            string.Equals(NormalizeName(post.Person), key,
-                                StringComparison.OrdinalIgnoreCase) ||
-                            post.UsesThreadOwner && thread is not null &&
-                            SameThread(post.Url, thread.Url))
+                        .Where(post => thread is not null &&
+                                       SameThread(post.Url, thread.Url))
                         .OrderByDescending(post => post.PostedDate)
                         .FirstOrDefault();
                     var hasLoa = loa is not null;
@@ -367,26 +354,6 @@ public static partial class ForumLoaService
         return DateTime.TryParse(text, CultureInfo.GetCultureInfo("en-GB"),
             DateTimeStyles.AllowWhiteSpaces, out var parsed) ? parsed.Date : null;
     }
-
-    private static string PersonFrom(string body, string author)
-    {
-        var combined = RankNameRx.Match(body);
-        if (combined.Success) return CleanField(combined.Groups["value"].Value);
-
-        var name = NameLineRx.Match(body);
-        if (name.Success)
-        {
-            var value = CleanField(name.Groups["value"].Value);
-            var rank = RankLineRx.Match(body);
-            if (rank.Success && !RankPrefixRx.IsMatch(value))
-                return $"{CleanField(rank.Groups["value"].Value)} {value}".Trim();
-            return value;
-        }
-        return CleanField(author);
-    }
-
-    private static bool HasExplicitPerson(string body) =>
-        RankNameRx.IsMatch(body) || NameLineRx.IsMatch(body);
 
     private static bool SameThread(string postUrl, string threadUrl)
     {
