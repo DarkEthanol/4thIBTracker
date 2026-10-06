@@ -763,10 +763,13 @@ public partial class CoursesViewModel : ObservableObject
     public ObservableCollection<CourseRecord> Records { get; } = new();
     public ObservableCollection<string> CourseNames { get; } = new();
     public ObservableCollection<string> FilterOptions { get; } = new();
+    public ObservableCollection<CourseTrackerDiscrepancy> Discrepancies { get; } = new();
 
     [ObservableProperty] private bool isLoading;
     [ObservableProperty] private string? error;
     [ObservableProperty] private string selectedFilter = "All courses";
+    [ObservableProperty] private string discrepancyStatus = "Not checked yet.";
+    [ObservableProperty] private bool discrepancyCheckComplete;
 
     private List<CourseRecord> _all = new();
 
@@ -779,12 +782,21 @@ public partial class CoursesViewModel : ObservableObject
     public async Task LoadAsync()
     {
         IsLoading = true; Error = null;
+        Discrepancies.Clear();
+        DiscrepancyCheckComplete = false;
+        DiscrepancyStatus = "Waiting for the course table…";
         try
         {
             var sc = _config.Sheet("SectionCourses");
-            var rows = await _sheets.ReadValuesFromFirstTabAsync(sc.Id,
+            var linkedCells = await _sheets.ReadLinksFromFirstTabAsync(sc.Id,
                 new[] { _config.Platoon.Name, _config.Platoon.ShortName, sc.Tab });
-            var (records, names) = SheetParsers.ParseCourses(rows, _config.Platoon.Number);
+            IList<IList<object>> rows = linkedCells
+                .Select(row => (IList<object>)row
+                    .Select(cell => (object)cell.Text)
+                    .ToList())
+                .ToList();
+            var (records, names) = SheetParsers.ParseCourses(
+                rows, _config.Platoon.Number, linkedCells);
             _all = records;
 
             CourseNames.Clear();
@@ -802,6 +814,7 @@ public partial class CoursesViewModel : ObservableObject
 
             ApplyFilter();
             DataLoaded?.Invoke();
+            await LoadDiscrepanciesAsync();
         }
         catch (Exception ex) { Error = ex.Message; }
         finally { IsLoading = false; }
@@ -823,6 +836,76 @@ public partial class CoursesViewModel : ObservableObject
                 !v.Equals("Advanced", StringComparison.OrdinalIgnoreCase));
         }
         foreach (var r in src) Records.Add(r);
+    }
+
+    private async Task LoadDiscrepanciesAsync()
+    {
+        var resolved = _all
+            .Select(record => (Record: record, ProfileUrl: record.ProfileUrl.Trim()))
+            .ToList();
+        var urls = resolved
+            .Where(item => item.ProfileUrl.Length > 0)
+            .Select(item => item.ProfileUrl)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        DiscrepancyStatus = $"Comparing {urls.Count} linked forum profile(s) with the course tracker…";
+        var profileResults = await OrbatWebService.FetchProfileQualificationResultsAsync(urls);
+
+        Discrepancies.Clear();
+        var checkedSoldiers = 0;
+        var uncheckedSoldiers = new List<string>();
+        foreach (var item in resolved)
+        {
+            if (item.ProfileUrl.Length == 0)
+            {
+                uncheckedSoldiers.Add($"{item.Record.Name} (no profile link)");
+                continue;
+            }
+            if (!profileResults.TryGetValue(item.ProfileUrl, out var result) ||
+                !result.Success)
+            {
+                var reason = result?.FailureReason ?? "profile could not be loaded";
+                uncheckedSoldiers.Add($"{item.Record.Name} ({reason})");
+                continue;
+            }
+
+            checkedSoldiers++;
+            foreach (var discrepancy in PromotionalCourseService.FindTrackerDiscrepancies(
+                         item.Record, result.Qualifications, item.ProfileUrl))
+                Discrepancies.Add(discrepancy);
+        }
+
+        var unmappedCourses = CourseNames
+            .Where(course => !PromotionalCourseService.CanMatchProfileCourse(course))
+            .ToList();
+        DiscrepancyStatus = $"Compared {checkedSoldiers}/{_all.Count} soldier profile(s) · " +
+                            $"{Discrepancies.Count} discrepancy/discrepancies." +
+                            (uncheckedSoldiers.Count > 0
+                                ? $" Could not check: {string.Join(", ", uncheckedSoldiers)}."
+                                : "") +
+                            (unmappedCourses.Count > 0
+                                ? $" No website badge mapping: {string.Join(", ", unmappedCourses)}."
+                                : "");
+        DiscrepancyCheckComplete = checkedSoldiers > 0;
+    }
+
+    [RelayCommand]
+    private void OpenDiscrepancyProfile(CourseTrackerDiscrepancy discrepancy)
+    {
+        if (!Uri.TryCreate(discrepancy.ProfileUrl, UriKind.Absolute, out var uri)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = uri.AbsoluteUri,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
     }
 }
 

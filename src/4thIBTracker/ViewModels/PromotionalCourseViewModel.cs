@@ -15,7 +15,8 @@ public partial class PromotionalCourseViewModel : ObservableObject
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyDictionary<string, IReadOnlyList<string>> _glossaryPrerequisites =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-    private int _trackerTabsChecked;
+    private readonly Dictionary<string, IReadOnlyList<ProfileQualification>>
+        _profileQualifications = new(StringComparer.OrdinalIgnoreCase);
     private int _courseLoadVersion;
     private bool _suppressCourseSelection;
     private string _profileWarning = "";
@@ -57,6 +58,7 @@ public partial class PromotionalCourseViewModel : ObservableObject
         Course = null;
         Candidates.Clear();
         RecentCourses.Clear();
+        _profileQualifications.Clear();
         try
         {
             if (string.IsNullOrWhiteSpace(_config.Forum.UpcomingForumUrl))
@@ -74,7 +76,12 @@ public partial class PromotionalCourseViewModel : ObservableObject
                 throw new InvalidOperationException(
                     "The Promotional Courses forum was not found from the configured upcoming-courses page.");
 
-            var forumHtml = await FetchHtml(forumUrl);
+            // The BG tracker, ORBAT and glossary are independent of the forum
+            // listing. Load them alongside it rather than making first load pay
+            // for those live requests one after another.
+            var referenceTask = LoadReferenceDataAsync();
+            var forumTask = FetchHtml(forumUrl);
+            var forumHtml = await forumTask;
             var recent = PromotionalCourseService.FindRecentThreads(forumHtml, forumUrl, 5);
             if (recent.Count == 0)
                 throw new InvalidOperationException(
@@ -82,14 +89,15 @@ public partial class PromotionalCourseViewModel : ObservableObject
 
             foreach (var thread in recent) RecentCourses.Add(thread);
 
-            StatusMessage = "Loading the BG course tracker and member profile links…";
-            await LoadReferenceDataAsync();
-
             _suppressCourseSelection = true;
             SelectedCourseThread = RecentCourses[0];
             _suppressCourseSelection = false;
+            var coursePagesTask = FetchCoursePagesAsync(SelectedCourseThread);
+
+            StatusMessage = "Loading the Course Glossary and member profile links…";
+            await referenceTask;
             HasLoaded = true;
-            await LoadCourseAsync(SelectedCourseThread);
+            await LoadCourseAsync(SelectedCourseThread, coursePagesTask);
         }
         catch (Exception ex)
         {
@@ -111,17 +119,15 @@ public partial class PromotionalCourseViewModel : ObservableObject
             throw new InvalidOperationException(
                 "The Section Courses spreadsheet is not configured in Settings.");
 
-        var tabs = await _sheets.GetTabNamesAsync(sheet.Id);
-        var linksTask = _sheets.ReadTabLinksAsync(sheet.Id, tabs);
+        var linksTask = _sheets.ReadAllTabLinksAsync(sheet.Id);
         var profilesTask = LoadOrbatProfileLinksAsync();
         var glossaryTask = LoadCourseGlossaryAsync();
         await Task.WhenAll(linksTask, profilesTask, glossaryTask);
 
         var linksByTab = await linksTask;
         var records = new List<CourseRecord>();
-        foreach (var tab in tabs)
+        foreach (var (tab, linkedCells) in linksByTab)
         {
-            if (!linksByTab.TryGetValue(tab, out var linkedCells)) continue;
             IList<IList<object>> rows = linkedCells
                 .Select(row => (IList<object>)row
                     .Select(cell => (object)cell.Text)
@@ -133,7 +139,6 @@ public partial class PromotionalCourseViewModel : ObservableObject
         _courseRecords = records;
         _orbatProfileLinks = await profilesTask;
         _glossaryPrerequisites = await glossaryTask;
-        _trackerTabsChecked = tabs.Count;
     }
 
     private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>>
@@ -182,7 +187,9 @@ public partial class PromotionalCourseViewModel : ObservableObject
         }
     }
 
-    private async Task LoadCourseAsync(ForumThread thread)
+    private async Task LoadCourseAsync(
+        ForumThread thread,
+        Task<IReadOnlyList<string>>? prefetchedPages = null)
     {
         if (FetchHtml is null) return;
         var loadVersion = Interlocked.Increment(ref _courseLoadVersion);
@@ -191,27 +198,26 @@ public partial class PromotionalCourseViewModel : ObservableObject
         StatusMessage = $"Reading {thread.Title}…";
         try
         {
-            var firstPage = await FetchHtml(thread.Url);
-            var lastPage = ForumLoaService.LastThreadPage(firstPage, thread.Url);
-            var pages = new List<string> { firstPage };
-            if (lastPage > 1)
-            {
-                var urls = Enumerable.Range(2, lastPage - 1)
-                    .Select(page => ForumLoaService.ThreadPageUrl(thread.Url, page))
-                    .ToList();
-                var remaining = FetchHtmlBatch is null
-                    ? await FetchSequentiallyAsync(urls)
-                    : await FetchHtmlBatch(urls);
-                pages.AddRange(remaining);
-            }
+            var pages = prefetchedPages is null
+                ? await FetchCoursePagesAsync(thread)
+                : await prefetchedPages;
 
             var parsedCourse = PromotionalCourseService.ParseCourse(thread, pages);
             var usesGlossary = PromotionalCourseService.TryGetGlossaryPrerequisites(
                 parsedCourse.Title, _glossaryPrerequisites, out var glossaryPrerequisites);
             if (usesGlossary)
                 parsedCourse = parsedCourse with { Prerequisites = glossaryPrerequisites };
-            var candidates = PromotionalCourseService.CheckCandidates(
+            var candidateProfiles = PromotionalCourseService.CheckCandidates(
                 parsedCourse, _courseRecords, _orbatProfileLinks);
+            var profileUrls = candidateProfiles
+                .Where(candidate => candidate.HasProfileUrl)
+                .Select(candidate => candidate.ProfileUrl)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var unavailableProfiles = await LoadProfileQualificationsAsync(profileUrls);
+            var candidates = PromotionalCourseService.CheckCandidates(
+                parsedCourse, _courseRecords, _orbatProfileLinks,
+                _profileQualifications);
             if (loadVersion != _courseLoadVersion ||
                 !string.Equals(SelectedCourseThread?.Url, thread.Url,
                     StringComparison.OrdinalIgnoreCase))
@@ -220,14 +226,23 @@ public partial class PromotionalCourseViewModel : ObservableObject
             Course = parsedCourse;
             Candidates.Clear();
             foreach (var candidate in candidates) Candidates.Add(candidate);
+            var uncheckedCandidates = candidateProfiles
+                .Where(candidate => !candidate.HasProfileUrl ||
+                                    unavailableProfiles.Contains(candidate.ProfileUrl))
+                .Select(candidate => candidate.Signup.DisplayName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
             StatusMessage = $"{parsedCourse.Prerequisites.Count} prerequisite(s) · " +
-                            $"{Candidates.Count} signup(s) · {_trackerTabsChecked} BG tracker tab(s) checked." +
+                            $"{Candidates.Count} signup(s)." +
                             (usesGlossary
                                 ? " Prerequisites from the Course Glossary."
                                 : _glossaryWarning.Length > 0
                                     ? _glossaryWarning
                                     : " No matching Course Glossary entry; announcement prerequisites used.") +
-                            _profileWarning;
+                            _profileWarning +
+                            (uncheckedCandidates.Count > 0
+                                ? $" Could not check: {string.Join(", ", uncheckedCandidates)}."
+                                : "");
         }
         catch (Exception ex)
         {
@@ -237,6 +252,74 @@ public partial class PromotionalCourseViewModel : ObservableObject
         {
             if (loadVersion == _courseLoadVersion) IsLoading = false;
         }
+    }
+
+    private async Task<IReadOnlyList<string>> FetchCoursePagesAsync(ForumThread thread)
+    {
+        var firstPage = await FetchHtml!(thread.Url);
+        var lastPage = ForumLoaService.LastThreadPage(firstPage, thread.Url);
+        var pages = new List<string> { firstPage };
+        if (lastPage <= 1) return pages;
+
+        var urls = Enumerable.Range(2, lastPage - 1)
+            .Select(page => ForumLoaService.ThreadPageUrl(thread.Url, page))
+            .ToList();
+        var remaining = FetchHtmlBatch is null
+            ? await FetchSequentiallyAsync(urls)
+            : await FetchHtmlBatch(urls);
+        pages.AddRange(remaining);
+        return pages;
+    }
+
+    private async Task<HashSet<string>> LoadProfileQualificationsAsync(
+        IReadOnlyList<string> profileUrls)
+    {
+        var missing = profileUrls
+            .Where(url => !_profileQualifications.ContainsKey(url))
+            .ToList();
+        var unavailable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (missing.Count == 0) return unavailable;
+
+        if (FetchHtmlBatch is not null)
+        {
+            try
+            {
+                var pages = await FetchHtmlBatch(missing);
+                for (var index = 0; index < missing.Count; index++)
+                {
+                    if (index >= pages.Count || !CacheProfile(missing[index], pages[index]))
+                        unavailable.Add(missing[index]);
+                }
+                return unavailable;
+            }
+            catch
+            {
+                // Retry individually so one unavailable profile does not hide
+                // the qualifications of every other course candidate.
+            }
+        }
+
+        foreach (var url in missing)
+        {
+            try
+            {
+                if (FetchHtml is null || !CacheProfile(url, await FetchHtml(url)))
+                    unavailable.Add(url);
+            }
+            catch
+            {
+                unavailable.Add(url);
+            }
+        }
+        return unavailable;
+    }
+
+    private bool CacheProfile(string url, string html)
+    {
+        if (!PromotionalCourseService.HasProfileQualificationSection(html)) return false;
+        _profileQualifications[url] =
+            PromotionalCourseService.ParseProfileQualifications(html);
+        return true;
     }
 
     private async Task<IReadOnlyList<string>> FetchSequentiallyAsync(IEnumerable<string> urls)

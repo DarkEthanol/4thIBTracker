@@ -595,6 +595,25 @@ Check(missingThreadMember.Name == "N. Missing" && !missingThreadMember.IsLoa &&
       missingThreadMember.MissingThread,
     "ORBAT member without a personal thread is reported");
 
+var linkedCourseRows = new List<IList<object>>
+{
+    new List<object> { "1-1" },
+    new List<object> { "Name/Rank", "ACMT", "Basic AT" },
+    new List<object> { "Pte. V. Example", "58", "Complete" },
+};
+var linkedCourseCells = new (string Text, string? Url)[][]
+{
+    [("1-1", null)],
+    [("Name/Rank", null), ("ACMT", null), ("Basic AT", null)],
+    [("Pte. V. Example", "https://unit.invalid/user-100.html"),
+        ("58", null), ("Complete", null)],
+};
+var (linkedCourseRecords, _) = SheetParsers.ParseCourses(
+    linkedCourseRows, 1, linkedCourseCells);
+Check(linkedCourseRecords.Count == 1 &&
+      linkedCourseRecords[0].ProfileUrl == "https://unit.invalid/user-100.html",
+    "section course parser retains profile links from the soldier name cells");
+
 var promotionalSource = """
     <select><option value="16">Phase 2 &amp; 3 Training</option>
     <option value="193">-- Promotional Courses</option></select>
@@ -703,16 +722,32 @@ var fallbackProfileLinks = new Dictionary<string, string>(StringComparer.Ordinal
     [ForumLoaService.NormalizeName("V. Example")] = "https://unit.invalid/user-999.html",
     [ForumLoaService.NormalizeName("D. Missing")] = "https://unit.invalid/user-200.html",
 };
+var exampleProfileQualifications = PromotionalCourseService.ParseProfileQualifications("""
+    <div id="teachingqual" class="userbox">
+      <img class="medal" src="https://unit.invalid/images/tradebadges/Advanced-Machine-Gunners.png"
+           alt="Changed display text that must not override the badge mapping" />
+      <img class="medal" src="https://unit.invalid/images/tradebadges/Basic-Anti-Tank.png"
+           alt="Basic Anti-Tank Course" />
+      <img class="medal" src="https://unit.invalid/images/tradebadges/Advanced-Driving.png"
+           alt="Driving Course" />
+      <img class="medal" src="https://unit.invalid/images/tradebadges/Advanced-Signals.png"
+           alt="Signals Course" />
+    </div>
+    """);
+var profileQualifications =
+    new Dictionary<string, IReadOnlyList<ProfileQualification>>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["https://unit.invalid/user-100.html"] = exampleProfileQualifications,
+    };
 var promotionalChecks = PromotionalCourseService.CheckCandidates(
-    promotionalInfo, bgCourseRecords, fallbackProfileLinks);
+    promotionalInfo, bgCourseRecords, fallbackProfileLinks, profileQualifications);
 Check(bgCourseRecords.Count == 1 &&
       promotionalChecks[0].OverallLabel == "Has prerequisites" &&
       promotionalChecks[0].Prerequisites.All(item => item.Result == PrerequisiteResult.Met) &&
       promotionalChecks[0].ProfileUrl == "https://unit.invalid/user-100.html" &&
       promotionalChecks[1].OverallLabel == "Needs review" &&
-      promotionalChecks[1].ProfileUrl == "https://unit.invalid/user-200.html" &&
-      promotionalChecks[1].TrackerNote.Contains("Not found", StringComparison.OrdinalIgnoreCase),
-    "BG tracker checks retain tracker profile links and use ORBAT links for unknown members");
+      promotionalChecks[1].ProfileUrl == "https://unit.invalid/user-200.html",
+    "profile badges are the course source of truth while tracker and ORBAT links resolve members");
 var joinedInitialCourse = promotionalInfo with
 {
     Signups =
@@ -723,11 +758,136 @@ var joinedInitialCourse = promotionalInfo with
     ],
 };
 var joinedInitialChecks = PromotionalCourseService.CheckCandidates(
-    joinedInitialCourse, bgCourseRecords);
+    joinedInitialCourse, bgCourseRecords, profileQualifications: profileQualifications);
 Check(ForumLoaService.NormalizeName("Pte.V.Example") ==
           ForumLoaService.NormalizeName("Pte. V. Example") &&
       joinedInitialChecks.Single().OverallLabel == "Has prerequisites",
     "joined initials and rank punctuation match spaced BG tracker names");
+var doctorQualifications = PromotionalCourseService.ParseProfileQualifications("""
+    <!-- start: perscom_profile_training_qualifications -->
+    <div id='teachingqual'>
+      <img src='https://unit.invalid/images/tradebadges/Doctors.png' alt='Doctors Course'>
+      <img src='https://unit.invalid/images/tradebadges/SCBC.png' alt='SCBC'>
+    </div>
+    """);
+var doctorMeetsBasicMedical = PromotionalCourseService.MatchProfileQualification(
+    "Basic Medical Course", doctorQualifications, out var doctorSupersedesBasic);
+var doctorMeetsAdvancedMedical = PromotionalCourseService.MatchProfileQualification(
+    "Advanced Medical Course", doctorQualifications, out var doctorSupersedesAdvanced);
+var scbcMeetsJnco = PromotionalCourseService.MatchProfileQualification(
+    "JNCO", doctorQualifications, out var scbcSupersedesJnco);
+Check(PromotionalCourseService.HasProfileQualificationSection(
+          "<div id='teachingqual'></div>") &&
+      doctorQualifications.Count == 2 &&
+      doctorMeetsBasicMedical == "Doctors Course" && doctorSupersedesBasic &&
+      doctorMeetsAdvancedMedical == "Doctors Course" && doctorSupersedesAdvanced &&
+      scbcMeetsJnco.Length == 0 && !scbcSupersedesJnco,
+    "profile badges follow explicit glossary supersession and not prerequisite progression");
+var glossarySupersessionCases = new[]
+{
+    ("Advanced_Apache.png", "Advanced Apache Conversion Course", "Initial Apache Conversion Course"),
+    ("Advanced_Chinook_CC.png", "Chinook HC6 Advanced Operational Conversion Training", "Chinook HC6 Initial Operational Conversion Training"),
+    ("Advanced-Anti-Tank.png", "Advanced Anti-Tank Course", "Basic Anti-Tank badge"),
+    ("Advanced-Machine-Gunners.png", "Advanced Machine Gunners Course", "Basic Machine Gunners Course"),
+    ("Advanced-Medical.png", "Advanced Medical Course", "Basic Medical Course"),
+    ("Doctors.png", "Doctors Course", "Advanced Medical Course"),
+    ("FAC.png", "FAC", "Helicopter Handling Course"),
+    ("JTAC.png", "JTAC", "ECAS"),
+    ("Pointman.png", "Pointman Course", "Infantry Land Navigation"),
+    ("RPAS.png", "RPAS", "UAV"),
+    ("SereB.png", "SERE B", "SERE A"),
+    ("Sniper.png", "Sniper Course", "Sharpshooter Course"),
+};
+Check(glossarySupersessionCases.All(testCase =>
+    {
+        var match = PromotionalCourseService.MatchProfileQualification(
+            testCase.Item3,
+            [new ProfileQualification(testCase.Item1, testCase.Item2)],
+            out var isSuperseding);
+        return match == testCase.Item2 && isSuperseding;
+    }) &&
+    PromotionalCourseService.MatchProfileQualification(
+        "Basic Searcher Course",
+        [new ProfileQualification("Advanced-Searcher.png", "Advanced Search Team Course")],
+        out var advancedSearcherSupersedesBasic).Length == 0 &&
+    !advancedSearcherSupersedesBasic,
+    "all live Course Glossary supersession rules are represented without unsupported assumptions");
+var trackerAliasQualifications = new[]
+{
+    new ProfileQualification("PPW.png", "PPW Qualified"),
+    new ProfileQualification("Basic-Medical.png", "Basic Medical Course"),
+};
+Check(PromotionalCourseService.CanMatchProfileCourse("L131A1 GSP") &&
+      PromotionalCourseService.CanMatchProfileCourse("CTM") &&
+      PromotionalCourseService.MatchProfileQualification(
+          "L131A1 GSP", trackerAliasQualifications, out _) == "PPW Qualified" &&
+      PromotionalCourseService.MatchProfileQualification(
+          "CTM", trackerAliasQualifications, out _) == "Basic Medical Course",
+    "GSP and CTM tracker headings map to their pistol and basic-medical website badges");
+var discrepancyRecord = new CourseRecord
+{
+    Name = "Pte. V. Example",
+    Section = "1-1",
+    Courses = new Dictionary<string, string>
+    {
+        ["Basic AT"] = "Not Done",
+        ["Advanced MG"] = "Complete",
+        ["Drivers"] = "Upcoming",
+        ["PNCO"] = "Complete",
+        ["Unmapped Internal Course"] = "Complete",
+    },
+};
+var discrepancyBadges = PromotionalCourseService.ParseProfileQualifications("""
+    <div id="teachingqual">
+      <img src="https://unit.invalid/images/tradebadges/Basic-Anti-Tank.png"
+           alt="Basic Anti-Tank Course">
+      <img src="https://unit.invalid/images/tradebadges/SCBC.png" alt="SCBC">
+    </div>
+    """);
+var courseDiscrepancies = PromotionalCourseService.FindTrackerDiscrepancies(
+    discrepancyRecord, discrepancyBadges, "https://unit.invalid/user-100.html");
+Check(courseDiscrepancies.Count == 3 &&
+      courseDiscrepancies.Any(item => item.Course == "Basic AT" &&
+          item.WebsiteStatus == "Basic Anti-Tank Course") &&
+      courseDiscrepancies.Any(item => item.Course == "Advanced MG" &&
+          item.WebsiteStatus == "No matching Advanced MG badge") &&
+      courseDiscrepancies.Any(item => item.Course == "PNCO" &&
+          item.WebsiteStatus == "No matching PNCO badge") &&
+      courseDiscrepancies.All(item => item.Course is not "Drivers" and not "Unmapped Internal Course"),
+    "course discrepancies report both directions without inferring unsupported supersession");
+var advancedMedicalTrackerRecord = new CourseRecord
+{
+    Name = "Cpl. C. Morgan",
+    Section = "1-1",
+    Courses = new Dictionary<string, string> { ["CTM"] = "Advanced" },
+};
+var basicMedicalOnly =
+    new[] { new ProfileQualification("Basic-Medical.png", "Basic Medical Course") };
+var doctorMedical =
+    new[] { new ProfileQualification("Doctors.png", "Doctors Course") };
+var missingAdvancedMedical = PromotionalCourseService.FindTrackerDiscrepancies(
+    advancedMedicalTrackerRecord, basicMedicalOnly,
+    "https://unit.invalid/user-3653.html");
+var doctorSatisfiesAdvanced = PromotionalCourseService.FindTrackerDiscrepancies(
+    advancedMedicalTrackerRecord, doctorMedical,
+    "https://unit.invalid/user-3653.html");
+Check(missingAdvancedMedical.Count == 1 &&
+      missingAdvancedMedical[0].Course == "CTM" &&
+      missingAdvancedMedical[0].TrackerStatus == "Advanced" &&
+      missingAdvancedMedical[0].WebsiteStatus ==
+          "No matching Advanced Medical Course badge" &&
+      doctorSatisfiesAdvanced.Count == 0,
+    "advanced CTM tracker values require Advanced Medical or a superseding Doctor badge");
+var unknownPrerequisiteCourse = joinedInitialCourse with
+{
+    Prerequisites = ["Minimum rank of LCpl"],
+};
+var unknownPrerequisiteCheck = PromotionalCourseService.CheckCandidates(
+    unknownPrerequisiteCourse, bgCourseRecords,
+    profileQualifications: profileQualifications).Single().Prerequisites.Single();
+Check(unknownPrerequisiteCheck.Result == PrerequisiteResult.Review &&
+      unknownPrerequisiteCheck.Detail.Contains("No badge mapping", StringComparison.OrdinalIgnoreCase),
+    "non-course prerequisites remain review items rather than being guessed as missing badges");
 Check(PromotionalCourseService.MatchTrackerCourse(
           "K170A1 NLAW Course", bgCourseRecords[0].Courses.Keys) == "Basic AT" &&
       PromotionalCourseService.MatchTrackerCourse(

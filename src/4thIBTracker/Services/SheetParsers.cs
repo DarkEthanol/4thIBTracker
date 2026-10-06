@@ -40,9 +40,15 @@ public static class SheetParsers
     /// blocks belonging to a different configured platoon are ignored.
     /// </summary>
     public static (List<CourseRecord> Records, List<string> CourseNames)
-        ParseCourses(IList<IList<object>> rows, int platoon)
+        ParseCourses(IList<IList<object>> rows, int platoon,
+            (string Text, string? Url)[][]? linkedCells = null)
     {
         static string Clean(string value) => Regex.Replace(value, @"\s+", " ").Trim();
+        string ProfileUrl(int row, int col) =>
+            linkedCells is not null && row >= 0 && row < linkedCells.Length &&
+            col >= 0 && col < linkedCells[row].Length
+                ? linkedCells[row][col].Url?.Trim() ?? ""
+                : "";
 
         static string HeaderKey(string value) =>
             Regex.Replace(Clean(value).ToLowerInvariant(), @"[^a-z0-9]+", "");
@@ -183,6 +189,7 @@ public static class SheetParsers
                 {
                     Section = block.Section,
                     Name = name,
+                    ProfileUrl = ProfileUrl(r, block.NameCol),
                     Acmt = Clean(S(rows[r], block.AcmtCol)),
                 };
                 foreach (var course in courseNames) rec.Courses[course] = "";

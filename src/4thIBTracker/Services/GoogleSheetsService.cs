@@ -427,6 +427,36 @@ public class GoogleSheetsService
         return result;
     }
 
+    /// <summary>
+    /// Reads displayed text and hyperlinks from every workbook tab in one API
+    /// request. Use this when the caller needs the complete workbook: it avoids
+    /// a separate metadata round trip solely to discover the tab names.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, (string Text, string? Url)[][]>>
+        ReadAllTabLinksAsync(string spreadsheetId)
+    {
+        var svc = await GetServiceAsync();
+        var request = svc.Spreadsheets.Get(spreadsheetId);
+        request.Fields = "sheets(properties(title),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))";
+        var response = await request.ExecuteAsync();
+        var result = new Dictionary<string, (string Text, string? Url)[][]>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var sheet in response.Sheets ?? [])
+        {
+            var title = sheet.Properties?.Title;
+            if (string.IsNullOrWhiteSpace(title)) continue;
+            var rows = sheet.Data?.FirstOrDefault()?.RowData;
+            result[title] = rows is null
+                ? []
+                : rows.Select(row =>
+                    (row.Values ?? new List<CellData>()).Select(cell =>
+                        (cell.FormattedValue ?? "", CellLink(cell))).ToArray())
+                    .ToArray();
+        }
+        return result;
+    }
+
     private static string? CellLink(CellData cell) =>
         !string.IsNullOrWhiteSpace(cell.Hyperlink)
             ? cell.Hyperlink
@@ -452,6 +482,43 @@ public class GoogleSheetsService
             return await ReadLinksAsync(
                 spreadsheetId, Range(resolved, unqualifiedRange));
         }
+    }
+
+    /// <summary>
+    /// Reads displayed text and hyperlinks from the first existing candidate
+    /// tab. This is the hyperlink-preserving counterpart to
+    /// <see cref="ReadValuesFromFirstTabAsync"/>.
+    /// </summary>
+    public async Task<(string Text, string? Url)[][]> ReadLinksFromFirstTabAsync(
+        string spreadsheetId, IEnumerable<string> tabNames,
+        string? unqualifiedRange = null)
+    {
+        var attempted = new List<string>();
+        Google.GoogleApiException? lastMissingTab = null;
+        foreach (var tab in tabNames
+                     .Where(value => !string.IsNullOrWhiteSpace(value))
+                     .Select(value => value.Trim())
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            attempted.Add(tab);
+            try
+            {
+                var escaped = tab.Replace("'", "''");
+                var range = string.IsNullOrWhiteSpace(unqualifiedRange)
+                    ? $"'{escaped}'"
+                    : $"'{escaped}'!{unqualifiedRange}";
+                return await ReadLinksAsync(spreadsheetId, range);
+            }
+            catch (Google.GoogleApiException ex)
+                when (ex.HttpStatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                lastMissingTab = ex;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"None of the expected tabs exist: {string.Join(" | ", attempted)}.",
+            lastMissingTab);
     }
 
     /// <summary>Write individual cell values in one batch (row1 is 1-based, col0 is 0-based).</summary>

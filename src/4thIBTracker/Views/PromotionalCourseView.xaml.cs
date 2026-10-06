@@ -11,6 +11,8 @@ namespace FourthIBTracker.Views;
 public partial class PromotionalCourseView : UserControl
 {
     private bool _webViewReady;
+    private readonly SemaphoreSlim _webViewInitLock = new(1, 1);
+    private readonly SemaphoreSlim _forumClientLock = new(1, 1);
     private readonly SemaphoreSlim _navigationLock = new(1, 1);
     private HttpClient? _forumClient;
 
@@ -30,9 +32,18 @@ public partial class PromotionalCourseView : UserControl
     private async Task EnsureWebViewAsync()
     {
         if (_webViewReady) return;
-        var environment = await WebViewEnvironmentService.GetAsync();
-        await Fetcher.EnsureCoreWebView2Async(environment);
-        _webViewReady = true;
+        await _webViewInitLock.WaitAsync();
+        try
+        {
+            if (_webViewReady) return;
+            var environment = await WebViewEnvironmentService.GetAsync();
+            await Fetcher.EnsureCoreWebView2Async(environment);
+            _webViewReady = true;
+        }
+        finally
+        {
+            _webViewInitLock.Release();
+        }
     }
 
     private async Task<string> FetchHtmlAsync(string url)
@@ -78,34 +89,43 @@ public partial class PromotionalCourseView : UserControl
     private async Task<HttpClient> GetForumClientAsync(string url)
     {
         if (_forumClient is not null) return _forumClient;
-        var cookies = await Fetcher.CoreWebView2.CookieManager.GetCookiesAsync(url);
-        var cookieContainer = new CookieContainer();
-        foreach (var cookie in cookies)
+        await _forumClientLock.WaitAsync();
+        try
         {
-            try
+            if (_forumClient is not null) return _forumClient;
+            var cookies = await Fetcher.CoreWebView2.CookieManager.GetCookiesAsync(url);
+            var cookieContainer = new CookieContainer();
+            foreach (var cookie in cookies)
             {
-                cookieContainer.Add(new Cookie(
-                    cookie.Name, cookie.Value,
-                    string.IsNullOrWhiteSpace(cookie.Path) ? "/" : cookie.Path,
-                    cookie.Domain)
+                try
                 {
-                    HttpOnly = cookie.IsHttpOnly,
-                    Secure = cookie.IsSecure,
-                });
+                    cookieContainer.Add(new Cookie(
+                        cookie.Name, cookie.Value,
+                        string.IsNullOrWhiteSpace(cookie.Path) ? "/" : cookie.Path,
+                        cookie.Domain)
+                    {
+                        HttpOnly = cookie.IsHttpOnly,
+                        Secure = cookie.IsSecure,
+                    });
+                }
+                catch (CookieException) { }
             }
-            catch (CookieException) { }
-        }
 
-        _forumClient = new HttpClient(new HttpClientHandler
+            _forumClient = new HttpClient(new HttpClientHandler
+            {
+                CookieContainer = cookieContainer,
+                UseCookies = true,
+                AutomaticDecompression = DecompressionMethods.All,
+            }) { Timeout = TimeSpan.FromSeconds(20) };
+            var userAgent = Fetcher.CoreWebView2.Settings.UserAgent;
+            if (!string.IsNullOrWhiteSpace(userAgent))
+                _forumClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", userAgent);
+            return _forumClient;
+        }
+        finally
         {
-            CookieContainer = cookieContainer,
-            UseCookies = true,
-            AutomaticDecompression = DecompressionMethods.All,
-        }) { Timeout = TimeSpan.FromSeconds(20) };
-        var userAgent = Fetcher.CoreWebView2.Settings.UserAgent;
-        if (!string.IsNullOrWhiteSpace(userAgent))
-            _forumClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", userAgent);
-        return _forumClient;
+            _forumClientLock.Release();
+        }
     }
 
     private void ResetForumClient()

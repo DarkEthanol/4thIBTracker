@@ -5,6 +5,13 @@ using System.Text.RegularExpressions;
 
 namespace FourthIBTracker.Services;
 
+public record ProfileQualificationFetchResult(
+    IReadOnlyList<ProfileQualification> Qualifications,
+    string FailureReason)
+{
+    public bool Success => FailureReason.Length == 0;
+}
+
 /// <summary>
 /// Reads the configured platoon's structure from the website ORBAT and
 /// compares it against the SuT tracker's ORBAT 2.0 sheet. Membership is
@@ -39,6 +46,86 @@ public static class OrbatWebService
     {
         var html = await Http.GetStringAsync(orbatUrl);
         return ParseProfileLinksHtml(html, orbatUrl);
+    }
+
+    /// <summary>
+    /// Reads the public training-qualification block from several forum
+    /// profiles. Individual failures are omitted so callers can report them
+    /// without losing the successfully checked profiles.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, IReadOnlyList<ProfileQualification>>>
+        FetchProfileQualificationsAsync(
+            IEnumerable<string> profileUrls,
+            CancellationToken cancellationToken = default)
+    {
+        var results = await FetchProfileQualificationResultsAsync(
+            profileUrls, cancellationToken);
+        return results
+            .Where(result => result.Value.Success)
+            .ToDictionary(result => result.Key,
+                result => result.Value.Qualifications,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Reads public qualification blocks while retaining a concise failure
+    /// reason for every requested URL. This lets callers identify the member
+    /// that was skipped instead of reducing all failures to a count.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, ProfileQualificationFetchResult>>
+        FetchProfileQualificationResultsAsync(
+            IEnumerable<string> profileUrls,
+            CancellationToken cancellationToken = default)
+    {
+        var urls = profileUrls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        using var gate = new SemaphoreSlim(8, 8);
+        var reads = urls.Select(async url =>
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                uri.Scheme is not ("http" or "https"))
+                return (Url: url, Result: new ProfileQualificationFetchResult(
+                    [], "invalid profile link"));
+
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                var html = await Http.GetStringAsync(url, cancellationToken);
+                if (!PromotionalCourseService.HasProfileQualificationSection(html))
+                    return (Url: url, Result: new ProfileQualificationFetchResult(
+                        [], "qualification section missing"));
+                return (Url: url, Result: new ProfileQualificationFetchResult(
+                    PromotionalCourseService.ParseProfileQualifications(html), ""));
+            }
+            catch (HttpRequestException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                var reason = ex.StatusCode is null
+                    ? "profile request failed"
+                    : $"website returned {(int)ex.StatusCode.Value}";
+                return (Url: url, Result: new ProfileQualificationFetchResult([], reason));
+            }
+            catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return (Url: url, Result: new ProfileQualificationFetchResult(
+                    [], "profile request timed out"));
+            }
+            catch when (!cancellationToken.IsCancellationRequested)
+            {
+                return (Url: url, Result: new ProfileQualificationFetchResult(
+                    [], "profile could not be loaded"));
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+
+        return (await Task.WhenAll(reads))
+            .ToDictionary(result => result.Url, result => result.Result,
+                StringComparer.OrdinalIgnoreCase);
     }
 
     internal static IReadOnlyDictionary<string, string> ParseProfileLinksHtml(

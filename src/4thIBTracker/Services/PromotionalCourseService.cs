@@ -24,12 +24,14 @@ public record PromotionalCourseInfo(
     IReadOnlyList<string> Prerequisites,
     IReadOnlyList<PromotionalCourseSignup> Signups);
 
+public record ProfileQualification(string BadgeFile, string CourseName);
+
 public enum PrerequisiteResult { Met, Missing, Review }
 
 public record PromotionalPrerequisiteCheck(
     string Prerequisite,
-    string TrackerCourse,
-    string TrackerValue,
+    string ProfileQualification,
+    bool IsSupersedingQualification,
     PrerequisiteResult Result)
 {
     public string Symbol => Result switch
@@ -46,9 +48,14 @@ public record PromotionalPrerequisiteCheck(
         _ => "#FFB347",
     };
 
-    public string Detail => TrackerCourse.Length == 0
-        ? "No matching tracker column"
-        : $"{TrackerCourse}: {(TrackerValue.Length == 0 ? "Not Done" : TrackerValue)}";
+    public string Detail => Result switch
+    {
+        PrerequisiteResult.Review when ProfileQualification.Length > 0 => ProfileQualification,
+        PrerequisiteResult.Review => "Profile qualifications unavailable",
+        PrerequisiteResult.Missing => "No matching profile badge",
+        _ when IsSupersedingQualification => $"{ProfileQualification} badge (supersedes this course)",
+        _ => $"{ProfileQualification} badge",
+    };
 }
 
 public record PromotionalCourseCandidate(
@@ -73,10 +80,22 @@ public record PromotionalCourseCandidate(
             : "#6AA84F";
 }
 
+public record CourseTrackerDiscrepancy(
+    string Name,
+    string Section,
+    string Course,
+    string TrackerStatus,
+    string WebsiteStatus,
+    string ProfileUrl)
+{
+    public string Detail => $"Tracker: {TrackerStatus} · Website: {WebsiteStatus}";
+}
+
 /// <summary>
 /// Parses the current promotional-course forum and checks signups against the
-/// unit-wide Section Courses workbook. Parsing is label-driven because course
-/// posts are written by people rather than generated from a rigid form.
+/// training-qualification badges on their forum profiles. Parsing is
+/// label-driven because course posts are written by people rather than
+/// generated from a rigid form.
 /// </summary>
 public static class PromotionalCourseService
 {
@@ -95,6 +114,160 @@ public static class PromotionalCourseService
         @"<(?<tag>div|article)\b[^>]*class\s*=\s*['""][^'""]*\bpost_body\b[^'""]*['""][^>]*>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex TagRx = new(@"<[^>]+>", RegexOptions.Singleline);
+    private static readonly Regex ImageRx = new(
+        @"<img\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+    // Live forum badge filenames mapped to their displayed qualifications.
+    // The filename is the stable identifier; alt/title text is only a fallback
+    // for a newly-added badge that has not reached this table yet.
+    private static readonly IReadOnlyDictionary<string, string> BadgeCourseNames =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AACwings.png"] = "Army Air Corps Wings",
+            ["Advanced_Apache.png"] = "Advanced Apache Conversion Course",
+            ["Advanced_Chinook_CC.png"] = "Chinook HC6 Advanced Operational Conversion Training",
+            ["Advanced-Anti-Tank.png"] = "Advanced Anti-Tank Course",
+            ["Advanced-Driving.png"] = "Driving Course",
+            ["Advanced-Machine-Gunners.png"] = "Advanced Machine Gunners Course",
+            ["Advanced-Medical.png"] = "Advanced Medical Course",
+            ["Advanced-Searcher.png"] = "Advanced Search Team Course",
+            ["Advanced-Signals.png"] = "Signals Course",
+            ["Air-Navigation.png"] = "Air Navigation",
+            ["Aircraft_Denial.png"] = "Aircraft Denial",
+            ["AirHandle.png"] = "HHC",
+            ["Ammunition-Technician.png"] = "Ammunition Technician",
+            ["AVic.png"] = "Mechanised Infantry Qualified",
+            ["Basic_Apache.png"] = "Initial Apache Conversion Course",
+            ["Basic_Chinook_CC.png"] = "Chinook HC6 Initial Operational Conversion Training",
+            ["Basic-Anti-Tank.png"] = "Basic Anti-Tank Course",
+            ["Basic-Machine-Gunners.png"] = "Basic Machine Gunners Course",
+            ["Basic-Medical.png"] = "Basic Medical Course",
+            ["Basic-Searcher.png"] = "Basic Searcher Course",
+            ["CBRN.png"] = "CBRN Course",
+            ["Commissioned-Officer.png"] = "Commissioned Officers Course",
+            ["CVRT.png"] = "CVR(T) Qualified",
+            ["Defence-Technical.png"] = "Defence Technical",
+            ["DIT.png"] = "DIT Qualified",
+            ["Doctors.png"] = "Doctors Course",
+            ["ECAS.png"] = "ECAS",
+            ["FAC.png"] = "FAC",
+            ["JAC_Aerial_Gunnery.png"] = "JAC Aerial Gunnery",
+            ["JAC_Signals_Course.png"] = "JAC Signals",
+            ["JNCO.png"] = "JNCO",
+            ["JTAC.png"] = "JTAC",
+            ["Junior-Management-Leadership-Course.png"] = "JMLC",
+            ["Land-Navigation.png"] = "Infantry Land Navigation",
+            ["Marksman-Qualified.png"] = "Sharpshooter Course",
+            ["MFC.png"] = "MFC Course",
+            ["Mortarman.png"] = "Mortarman Course",
+            ["NCACITC.png"] = "NCAITC",
+            ["NightFlying.png"] = "Night Flying",
+            ["PNCO.png"] = "PNCO",
+            ["Pointman.png"] = "Pointman Course",
+            ["PPW.png"] = "PPW Qualified",
+            ["PSBC.png"] = "PSBC",
+            ["RAFwings1.png"] = "Royal Air Force Wings",
+            ["RPAS.png"] = "RPAS",
+            ["SCBC.png"] = "SCBC",
+            ["SereA.png"] = "SERE A",
+            ["SereB.png"] = "SERE B",
+            ["Skill-At-Arms.png"] = "Skill at Arms Instructor",
+            ["SlingLoading.png"] = "Cargo Handling",
+            ["Sniper.png"] = "Sniper Course",
+            ["SoI.png"] = "School Of Infantry",
+            ["Spotter.png"] = "Spotter Course",
+            ["UAV.png"] = "UAV",
+            ["UGL.png"] = "UGL Qualified",
+            ["verifiedveteran.png"] = "Verified Veteran",
+            ["Zeus-Qualified.png"] = "Zeus Qualified",
+        };
+
+    // A profile shows only the highest badge in several course families.
+    // These are therefore qualifications proven by the displayed badge even
+    // though the lower badge image is deliberately absent from the profile.
+    // Verified against the live Course Glossary (thread 26082) on 2026-10-06.
+    // Only explicit Supersedes fields belong here: a prerequisite alone does
+    // not establish supersession. Transitive entries are expanded so callers
+    // do not need to understand the hierarchy (Doctors -> Advanced -> Basic).
+    private static readonly IReadOnlyDictionary<string, string[]> SupersededBadgeCourses =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Advanced_Apache.png"] = ["Initial Apache Conversion Course"],
+            ["Advanced_Chinook_CC.png"] = ["Chinook HC6 Initial Operational Conversion Training"],
+            ["Advanced-Anti-Tank.png"] = ["Basic Anti-Tank badge"],
+            ["Advanced-Machine-Gunners.png"] = ["Basic Machine Gunners Course"],
+            ["Advanced-Medical.png"] = ["Basic Medical Course"],
+            ["Doctors.png"] = ["Advanced Medical Course", "Basic Medical Course"],
+            ["FAC.png"] = ["Helicopter Handling Course"],
+            ["JTAC.png"] = ["ECAS"],
+            ["Pointman.png"] = ["Infantry Land Navigation"],
+            ["RPAS.png"] = ["UAV"],
+            ["SereB.png"] = ["SERE A"],
+            ["Sniper.png"] = ["Sharpshooter Course"],
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> CourseAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["l2a1asmilaw"] = "basicat",
+            ["l2a1ilawasm"] = "basicat",
+            ["l2a1ilaworasm"] = "basicat",
+            ["k170a1nlaw"] = "basicat",
+            ["basicantitank"] = "basicat",
+            ["basicmachinegunner"] = "l7a2gpmg",
+            ["basicmachinegunners"] = "l7a2gpmg",
+            ["basicsearcher"] = "searcher",
+            ["basicsearchers"] = "searcher",
+            ["searchers"] = "searcher",
+            ["infantrylandnavigation"] = "landnav",
+            ["landnavigation"] = "landnav",
+            ["basiclandnav"] = "landnav",
+            ["defenceinstructortechnique"] = "dit",
+            ["defenceinstructorstechnique"] = "dit",
+            ["defenceinstructortechniques"] = "dit",
+            ["defenceinstructorstechniques"] = "dit",
+            ["skillatarmsinstructor"] = "saa",
+            ["potentialnoncommissionedofficer"] = "pnco",
+            ["potentialnoncommissionedofficers"] = "pnco",
+            ["juniornoncommissionedofficer"] = "jnco",
+            ["juniornoncommissionedofficers"] = "jnco",
+            ["sectioncommanderbattle"] = "scbc",
+            ["sectioncommandersbattle"] = "scbc",
+            ["platoonsergeantbattle"] = "psbc",
+            ["platoonsergeantsbattle"] = "psbc",
+            ["platooncommanderbattle"] = "pcbc",
+            ["platooncommandersbattle"] = "pcbc",
+            ["commissionedofficer"] = "pcbc",
+            ["commissionedofficers"] = "pcbc",
+            ["advancedantitank"] = "advancedat",
+            ["advancedmachinegunner"] = "advancedmg",
+            ["advancedmachinegunners"] = "advancedmg",
+            ["advancedsearchteam"] = "advancedsearcher",
+            ["ammunitiontechnician"] = "ammotech",
+            ["driver"] = "driving",
+            ["drivers"] = "driving",
+            ["helicopterhandling"] = "hhc",
+            ["l131a1gsp"] = "ppw",
+            ["gsp"] = "ppw",
+            ["pistol"] = "ppw",
+            ["ctm"] = "basicmedical",
+            ["combatteammedic"] = "basicmedical",
+            ["l123ugl"] = "ugl",
+            ["l129a1ssr"] = "sharpshooter",
+            ["sere"] = "serea",
+        };
+
+    // Some tracker columns represent both the basic and advanced award. In
+    // those columns the literal value "Advanced" must be checked against the
+    // higher website badge, not merely treated as another spelling of complete.
+    private static readonly IReadOnlyDictionary<string, string> AdvancedTrackerCourses =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["basicat"] = "Advanced Anti-Tank Course",
+            ["l7a2gpmg"] = "Advanced Machine Gunners Course",
+            ["basicmedical"] = "Advanced Medical Course",
+            ["searcher"] = "Advanced Search Team Course",
+        };
 
     public static string FindPromotionalForumUrl(string html, string sourceUrl)
     {
@@ -248,7 +421,9 @@ public static class PromotionalCourseService
 
     public static IReadOnlyList<PromotionalCourseCandidate> CheckCandidates(
         PromotionalCourseInfo course, IEnumerable<CourseRecord> records,
-        IReadOnlyDictionary<string, string>? orbatProfileLinks = null)
+        IReadOnlyDictionary<string, string>? orbatProfileLinks = null,
+        IReadOnlyDictionary<string, IReadOnlyList<ProfileQualification>>?
+            profileQualifications = null)
     {
         var roster = records
             .GroupBy(record => ForumLoaService.NormalizeName(record.Name),
@@ -262,42 +437,179 @@ public static class PromotionalCourseService
             roster.TryGetValue(key, out var matches);
             matches ??= [];
             var record = ChooseRecord(matches, signup.Unit);
-            var ambiguous = matches.Count > 1 && record is null;
-            var note = matches.Count == 0
-                ? "Not found in the BG course tracker"
-                : ambiguous
-                    ? "Multiple tracker records match this name"
-                    : "";
             var profileUrl = record?.ProfileUrl.Trim() ?? "";
             if (profileUrl.Length == 0 && orbatProfileLinks is not null)
                 orbatProfileLinks.TryGetValue(key, out profileUrl);
             profileUrl ??= "";
+            var note = profileUrl.Length == 0
+                ? "Forum profile not found in the course tracker or website ORBAT"
+                : "";
+
+            IReadOnlyList<ProfileQualification>? qualifications = null;
+            if (profileUrl.Length > 0 && profileQualifications is not null)
+                profileQualifications.TryGetValue(profileUrl, out qualifications);
 
             var checks = course.Prerequisites.Select(prerequisite =>
             {
-                if (record is null)
+                if (qualifications is null)
                     return new PromotionalPrerequisiteCheck(
-                        prerequisite, "", "", PrerequisiteResult.Review);
+                        prerequisite, "", false, PrerequisiteResult.Review);
 
-                var trackerCourse = MatchTrackerCourse(prerequisite, record.Courses.Keys);
-                if (trackerCourse.Length == 0)
+                var qualification = MatchProfileQualification(
+                    prerequisite, qualifications, out var superseding);
+                if (qualification.Length == 0)
+                {
+                    var knownCourse = CanMatchProfileCourse(prerequisite);
                     return new PromotionalPrerequisiteCheck(
-                        prerequisite, "", "", PrerequisiteResult.Review);
+                        prerequisite,
+                        knownCourse
+                            ? ""
+                            : "No badge mapping exists for this prerequisite",
+                        false,
+                        knownCourse
+                            ? PrerequisiteResult.Missing
+                            : PrerequisiteResult.Review);
+                }
 
-                var value = record.Courses.GetValueOrDefault(trackerCourse, "").Trim();
-                var result = value.Equals("Complete", StringComparison.OrdinalIgnoreCase) ||
-                             value.Equals("Advanced", StringComparison.OrdinalIgnoreCase)
-                    ? PrerequisiteResult.Met
-                    : value.Length == 0 || value.Equals("Not Done", StringComparison.OrdinalIgnoreCase)
-                        ? PrerequisiteResult.Missing
-                        : PrerequisiteResult.Review;
                 return new PromotionalPrerequisiteCheck(
-                    prerequisite, trackerCourse, value, result);
+                    prerequisite, qualification, superseding, PrerequisiteResult.Met);
             }).ToList();
 
             return new PromotionalCourseCandidate(
                 signup, record?.Section ?? "", note, profileUrl, checks);
         }).ToList();
+    }
+
+    public static bool HasProfileQualificationSection(string html) =>
+        Regex.IsMatch(html,
+            @"(?:id\s*=\s*['""]teachingqual['""]|perscom_profile_training_qualifications)",
+            RegexOptions.IgnoreCase);
+
+    public static IReadOnlyList<ProfileQualification> ParseProfileQualifications(string html)
+    {
+        var qualifications = new Dictionary<string, ProfileQualification>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (Match image in ImageRx.Matches(html))
+        {
+            var tag = image.Value;
+            var source = HtmlAttribute(tag, "src");
+            var marker = source.LastIndexOf("/tradebadges/",
+                StringComparison.OrdinalIgnoreCase);
+            if (marker < 0) continue;
+
+            var badgeFile = source[(marker + "/tradebadges/".Length)..];
+            var suffix = badgeFile.IndexOfAny(['?', '#']);
+            if (suffix >= 0) badgeFile = badgeFile[..suffix];
+            badgeFile = WebUtility.UrlDecode(badgeFile).Trim();
+            if (badgeFile.Length == 0 || qualifications.ContainsKey(badgeFile)) continue;
+
+            var displayedName = BadgeCourseNames.GetValueOrDefault(badgeFile, "");
+            if (displayedName.Length == 0) displayedName = HtmlAttribute(tag, "alt");
+            if (displayedName.Length == 0) displayedName = HtmlAttribute(tag, "title");
+            if (displayedName.Length == 0) continue;
+
+            qualifications[badgeFile] = new ProfileQualification(badgeFile, displayedName);
+        }
+        return qualifications.Values.ToList();
+    }
+
+    public static string MatchProfileQualification(
+        string prerequisite, IEnumerable<ProfileQualification> qualifications,
+        out bool superseding)
+    {
+        superseding = false;
+        var wanted = CanonicalCourseKey(prerequisite);
+        foreach (var qualification in qualifications)
+            if (string.Equals(CanonicalCourseKey(qualification.CourseName), wanted,
+                    StringComparison.OrdinalIgnoreCase))
+                return qualification.CourseName;
+
+        foreach (var qualification in qualifications)
+        {
+            if (!SupersededBadgeCourses.TryGetValue(
+                    qualification.BadgeFile, out var supersededCourses))
+                continue;
+            if (!supersededCourses.Any(course => string.Equals(
+                    CanonicalCourseKey(course), wanted,
+                    StringComparison.OrdinalIgnoreCase)))
+                continue;
+            superseding = true;
+            return qualification.CourseName;
+        }
+        return "";
+    }
+
+    public static IReadOnlyList<CourseTrackerDiscrepancy> FindTrackerDiscrepancies(
+        CourseRecord record,
+        IReadOnlyList<ProfileQualification> qualifications,
+        string profileUrl)
+    {
+        var discrepancies = new List<CourseTrackerDiscrepancy>();
+        foreach (var (course, rawStatus) in record.Courses)
+        {
+            if (!CanMatchProfileCourse(course) ||
+                !TryTrackerCompletion(rawStatus, out var trackerComplete))
+                continue;
+
+            var expectedProfileCourse = ExpectedProfileCourse(course, rawStatus);
+            var qualification = MatchProfileQualification(
+                expectedProfileCourse, qualifications, out var superseding);
+            var websiteComplete = qualification.Length > 0;
+            if (trackerComplete == websiteComplete) continue;
+
+            discrepancies.Add(new CourseTrackerDiscrepancy(
+                record.Name,
+                record.Section,
+                course,
+                rawStatus.Trim().Length == 0 ? "Not done" : rawStatus.Trim(),
+                websiteComplete
+                    ? superseding
+                        ? $"{qualification} (superseding badge)"
+                        : qualification
+                    : $"No matching {expectedProfileCourse} badge",
+                profileUrl));
+        }
+        return discrepancies;
+    }
+
+    public static bool CanMatchProfileCourse(string prerequisite)
+    {
+        var wanted = CanonicalCourseKey(prerequisite);
+        return BadgeCourseNames.Values.Any(course => string.Equals(
+                   CanonicalCourseKey(course), wanted,
+                   StringComparison.OrdinalIgnoreCase)) ||
+               SupersededBadgeCourses.Values.SelectMany(courses => courses).Any(course =>
+                   string.Equals(CanonicalCourseKey(course), wanted,
+                       StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryTrackerCompletion(string value, out bool completed)
+    {
+        value = value.Trim();
+        if (value.Equals("Complete", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("Advanced", StringComparison.OrdinalIgnoreCase))
+        {
+            completed = true;
+            return true;
+        }
+        if (value.Length == 0 || value.Equals("Not Done", StringComparison.OrdinalIgnoreCase))
+        {
+            completed = false;
+            return true;
+        }
+
+        // Upcoming, booked and other non-final values are not completion
+        // claims, so they cannot be safely compared to awarded badges.
+        completed = false;
+        return false;
+    }
+
+    private static string ExpectedProfileCourse(string trackerCourse, string trackerStatus)
+    {
+        if (!trackerStatus.Trim().Equals("Advanced", StringComparison.OrdinalIgnoreCase))
+            return trackerCourse;
+        var key = CanonicalCourseKey(trackerCourse);
+        return AdvancedTrackerCourses.GetValueOrDefault(key, trackerCourse);
     }
 
     public static string MatchTrackerCourse(
@@ -308,53 +620,10 @@ public static class PromotionalCourseService
         // particular, the glossary defines Basic AT as completion of both the
         // L2A1 ASM/ILAW and K170A1 NLAW courses. Unknown wording is never
         // guessed: it remains unmatched and is surfaced as Needs review.
-        var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["l2a1asmilaw"] = "basicat",
-            ["l2a1ilawasm"] = "basicat",
-            ["k170a1nlaw"] = "basicat",
-            ["basicantitank"] = "basicat",
-            ["basicmachinegunner"] = "l7a2gpmg",
-            ["basicmachinegunners"] = "l7a2gpmg",
-            ["basicsearcher"] = "searcher",
-            ["basicsearchers"] = "searcher",
-            ["searchers"] = "searcher",
-            ["infantrylandnavigation"] = "landnav",
-            ["landnavigation"] = "landnav",
-            ["basiclandnav"] = "landnav",
-            ["defenceinstructortechnique"] = "dit",
-            ["defenceinstructorstechnique"] = "dit",
-            ["defenceinstructortechniques"] = "dit",
-            ["defenceinstructorstechniques"] = "dit",
-            ["skillatarmsinstructor"] = "saa",
-            ["potentialnoncommissionedofficer"] = "pnco",
-            ["potentialnoncommissionedofficers"] = "pnco",
-            ["juniornoncommissionedofficer"] = "jnco",
-            ["juniornoncommissionedofficers"] = "jnco",
-            ["sectioncommanderbattle"] = "scbc",
-            ["sectioncommandersbattle"] = "scbc",
-            ["platoonsergeantbattle"] = "psbc",
-            ["platoonsergeantsbattle"] = "psbc",
-            ["platooncommanderbattle"] = "pcbc",
-            ["platooncommandersbattle"] = "pcbc",
-            ["advancedantitank"] = "advancedat",
-            ["advancedmachinegunner"] = "advancedmg",
-            ["ammunitiontechnician"] = "ammotech",
-            ["driver"] = "driving",
-            ["drivers"] = "driving",
-            ["l2a1ilaworasm"] = "basicat",
-        };
-
-        string CanonicalKey(string value)
-        {
-            var key = CourseKey(value);
-            return aliases.GetValueOrDefault(key, key);
-        }
-
-        var wanted = CanonicalKey(prerequisite);
+        var wanted = CanonicalCourseKey(prerequisite);
 
         return trackerCourses.FirstOrDefault(course =>
-            string.Equals(CanonicalKey(course), wanted, StringComparison.OrdinalIgnoreCase)) ?? "";
+            string.Equals(CanonicalCourseKey(course), wanted, StringComparison.OrdinalIgnoreCase)) ?? "";
     }
 
     private static CourseRecord? ChooseRecord(
@@ -429,6 +698,22 @@ public static class PromotionalCourseService
             .Where(word => word is not "course" and not "badge" and not "qualified" and not "cadre")
             .ToList();
         return string.Concat(words);
+    }
+
+    private static string CanonicalCourseKey(string value)
+    {
+        var key = CourseKey(value);
+        return CourseAliases.GetValueOrDefault(key, key);
+    }
+
+    private static string HtmlAttribute(string tag, string attribute)
+    {
+        var match = Regex.Match(tag,
+            $@"\b{Regex.Escape(attribute)}\s*=\s*(?:""(?<value>[^""]*)""|'(?<value>[^']*)')",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        return match.Success
+            ? WebUtility.HtmlDecode(match.Groups["value"].Value).Trim()
+            : "";
     }
 
     private static string PromotionalCourseKey(string value)
