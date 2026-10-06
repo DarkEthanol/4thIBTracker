@@ -6,16 +6,31 @@
         <wv2:WebView2 x:Name="Fetcher" Width="0" Height="0" Visibility="Hidden"/>
 
         <DockPanel Margin="20">
-            <DockPanel DockPanel.Dock="Top">
-                <TextBlock Style="{StaticResource H1}" Text="Latest Promotional Course"/>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+            <Grid DockPanel.Dock="Top">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{StaticResource H1}" Text="Promotional Courses"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
                             HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <TextBlock Text="Course" Foreground="{StaticResource TextDim}"
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <ComboBox Width="360" Margin="0,0,7,0" Padding="7,4"
+                              ItemsSource="{Binding RecentCourses}"
+                              SelectedItem="{Binding SelectedCourseThread, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                     <Button Content="Open course ↗" Padding="12,5" Margin="0,0,7,0"
                             Command="{Binding OpenCourseCommand}"/>
                     <Button Content="↻ Refresh" Padding="12,5" FontWeight="SemiBold"
                             Command="{Binding RefreshCommand}"/>
                 </StackPanel>
-            </DockPanel>
+            </Grid>
 
             <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}"
                        Foreground="{StaticResource Accent}" Margin="0,0,0,4"/>
@@ -105,8 +120,34 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{Binding Signup.DisplayName}" FontSize="15.5"
-                                                               FontWeight="Bold" Foreground="{StaticResource TextMain}"/>
+                                                    <Button Command="{Binding DataContext.OpenProfileCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            IsEnabled="{Binding HasProfileUrl}"
+                                                            HorizontalAlignment="Left" Padding="0" BorderThickness="0"
+                                                            Background="Transparent" ToolTip="{Binding ProfileUrl}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <TextBlock x:Name="ProfileName"
+                                                                           Text="{Binding Signup.DisplayName}"
+                                                                           FontSize="15.5" FontWeight="Bold"
+                                                                           Foreground="{StaticResource TextMain}"/>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsEnabled" Value="True">
+                                                                        <Setter Property="Cursor" Value="Hand"/>
+                                                                    </Trigger>
+                                                                    <MultiTrigger>
+                                                                        <MultiTrigger.Conditions>
+                                                                            <Condition Property="IsEnabled" Value="True"/>
+                                                                            <Condition Property="IsMouseOver" Value="True"/>
+                                                                        </MultiTrigger.Conditions>
+                                                                        <Setter TargetName="ProfileName" Property="TextDecorations" Value="Underline"/>
+                                                                        <Setter TargetName="ProfileName" Property="Foreground" Value="{StaticResource Accent}"/>
+                                                                    </MultiTrigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
                                                     <TextBlock Foreground="{StaticResource TextDim}" FontSize="12.5">
                                                         <Run Text="{Binding Signup.Unit, Mode=OneWay}"/>
                                                         <Run Text=" · "/>

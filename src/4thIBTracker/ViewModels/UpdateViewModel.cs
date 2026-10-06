@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,6 +16,9 @@ public partial class UpdateViewModel : ObservableObject
     [ObservableProperty] private string availableVersion = "";
     [ObservableProperty] private string statusMessage;
     [ObservableProperty] private string progressText = "";
+    [ObservableProperty] private string releaseNotesTitle = "";
+    [ObservableProperty] private string releaseNotes = "";
+    [ObservableProperty] private bool hasReleaseNotes;
 
     public string CurrentVersion => _service.CurrentVersionText;
     public bool IsConfigured => _service.IsConfigured;
@@ -45,11 +49,20 @@ public partial class UpdateViewModel : ObservableObject
         if (!silent) StatusMessage = "Checking GitHub Releases…";
         try
         {
-            _availableRelease = await _service.CheckForUpdateAsync();
+            var result = await _service.CheckForUpdateDetailsAsync();
+            _availableRelease = result.AvailableRelease;
             UpdateAvailable = _availableRelease != null;
             AvailableVersion = _availableRelease is null
                 ? ""
                 : $"{_availableRelease.Version.Major}.{_availableRelease.Version.Minor}.{_availableRelease.Version.Build}";
+            var displayedRelease = result.DisplayRelease;
+            HasReleaseNotes = displayedRelease is not null;
+            ReleaseNotesTitle = displayedRelease is null
+                ? ""
+                : $"RELEASE NOTES — v{FormatVersion(displayedRelease.Version)}";
+            ReleaseNotes = displayedRelease is null
+                ? ""
+                : FormatReleaseNotes(displayedRelease.ReleaseNotes);
             StatusMessage = _availableRelease is null
                 ? $"Version {CurrentVersion} is up to date."
                 : $"Version {AvailableVersion} is ready to download.";
@@ -60,6 +73,31 @@ public partial class UpdateViewModel : ObservableObject
         }
         finally { IsBusy = false; }
     }
+
+    internal static string FormatReleaseNotes(string notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+            return "No release notes were published for this version.";
+
+        var lines = notes.Replace("\r\n", "\n").Split('\n')
+            .Select(line =>
+            {
+                var text = Regex.Replace(line, @"^\s{0,3}#{1,6}\s*", "");
+                text = Regex.Replace(text, @"^\s*[-*]\s+", "• ");
+                text = Regex.Replace(text, @"\[([^\]]+)\]\([^\)]+\)", "$1");
+                text = Regex.Replace(text, @"`([^`]+)`", "$1");
+                return text.Replace("**", "").Replace("__", "").TrimEnd();
+            })
+            .ToList();
+
+        for (var index = lines.Count - 1; index > 0; index--)
+            if (lines[index].Length == 0 && lines[index - 1].Length == 0)
+                lines.RemoveAt(index);
+        return string.Join(Environment.NewLine, lines).Trim();
+    }
+
+    private static string FormatVersion(Version version) =>
+        $"{version.Major}.{version.Minor}.{Math.Max(0, version.Build)}";
 
     [RelayCommand(AllowConcurrentExecutions = false)]
     private async Task InstallUpdateAsync()

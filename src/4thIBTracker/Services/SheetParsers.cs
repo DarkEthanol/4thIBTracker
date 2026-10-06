@@ -202,11 +202,17 @@ public static class SheetParsers
     /// Tabs that do not contain a course matrix simply return no records.
     /// </summary>
     public static List<CourseRecord> ParseCourseRosterTab(
-        IList<IList<object>> rows, string unitName)
+        IList<IList<object>> rows, string unitName,
+        (string Text, string? Url)[][]? linkedCells = null)
     {
         static string Clean(string value) => Regex.Replace(value, @"\s+", " ").Trim();
         static string HeaderKey(string value) =>
             Regex.Replace(Clean(value).ToLowerInvariant(), @"[^a-z0-9]+", "");
+        string ProfileUrl(int row, int col) =>
+            linkedCells is not null && row >= 0 && row < linkedCells.Length &&
+            col >= 0 && col < linkedCells[row].Length
+                ? linkedCells[row][col].Url?.Trim() ?? ""
+                : "";
 
         var headers = new List<(int Row, int NameCol, int AcmtCol, List<(int Col, string Name)> Courses)>();
         for (var row = 0; row < rows.Count; row++)
@@ -248,6 +254,7 @@ public static class SheetParsers
                 {
                     Section = unitName,
                     Name = name,
+                    ProfileUrl = ProfileUrl(row, block.NameCol),
                     Acmt = Clean(S(rows[row], block.AcmtCol)),
                 };
                 foreach (var course in block.Courses)

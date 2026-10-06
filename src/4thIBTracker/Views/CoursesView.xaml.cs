@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using FourthIBTracker.ViewModels;
 
@@ -11,6 +13,7 @@ namespace FourthIBTracker.Views;
 public partial class CoursesView : UserControl
 {
     private readonly CoursesViewModel _vm;
+    private DataGridColumnHeader? _hoveredHeader;
 
     public CoursesView(CoursesViewModel vm)
     {
@@ -18,6 +21,8 @@ public partial class CoursesView : UserControl
         _vm = vm;
         DataContext = vm;
         vm.DataLoaded += BuildColumns;
+        Grid.MouseMove += CoursesGrid_MouseMove;
+        Grid.MouseLeave += (_, _) => SetHoveredColumn(null);
 
         // Group rows by section so each section reads as its own block.
         var view = CollectionViewSource.GetDefaultView(vm.Records);
@@ -29,6 +34,56 @@ public partial class CoursesView : UserControl
             if (_vm.Records.Count == 0 && !_vm.IsLoading)
                 await _vm.LoadAsync();
         };
+    }
+
+    private void CoursesGrid_MouseMove(object sender, MouseEventArgs e)
+    {
+        var cell = FindAncestor<DataGridCell>(e.OriginalSource as DependencyObject);
+        SetHoveredColumn(cell?.Column);
+    }
+
+    private void SetHoveredColumn(DataGridColumn? column)
+    {
+        var header = column is null
+            ? null
+            : FindVisualChildren<DataGridColumnHeader>(Grid)
+                .FirstOrDefault(candidate => candidate.Column == column);
+        if (ReferenceEquals(header, _hoveredHeader)) return;
+
+        if (_hoveredHeader is not null)
+        {
+            _hoveredHeader.ClearValue(Control.BackgroundProperty);
+            _hoveredHeader.ClearValue(Control.BorderBrushProperty);
+        }
+
+        _hoveredHeader = header;
+        if (_hoveredHeader is null) return;
+        _hoveredHeader.Background = new SolidColorBrush(Color.FromRgb(0x4A, 0x5F, 0x3A));
+        _hoveredHeader.BorderBrush = new SolidColorBrush(Color.FromRgb(0x7A, 0x9E, 0x5F));
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match) yield return match;
+            foreach (var descendant in FindVisualChildren<T>(child)) yield return descendant;
+        }
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match) return match;
+            current = current is ContentElement content
+                ? ContentOperations.GetParent(content) ??
+                  (content as FrameworkContentElement)?.Parent
+                : VisualTreeHelper.GetParent(current);
+        }
+        return null;
     }
 
     private static Style DarkHeader(bool wrapped)

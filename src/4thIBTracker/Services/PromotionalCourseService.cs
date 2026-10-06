@@ -55,8 +55,11 @@ public record PromotionalCourseCandidate(
     PromotionalCourseSignup Signup,
     string TrackerUnit,
     string TrackerNote,
+    string ProfileUrl,
     IReadOnlyList<PromotionalPrerequisiteCheck> Prerequisites)
 {
+    public bool HasProfileUrl => ProfileUrl.Length > 0;
+
     public string OverallLabel => Prerequisites.Any(item => item.Result == PrerequisiteResult.Missing)
         ? "Missing prerequisites"
         : Prerequisites.Any(item => item.Result == PrerequisiteResult.Review)
@@ -77,6 +80,8 @@ public record PromotionalCourseCandidate(
 /// </summary>
 public static class PromotionalCourseService
 {
+    public const string CourseGlossaryPath = "thread-26082.html";
+
     private static readonly Regex AnchorRx = new(
         @"<a\b[^>]*href\s*=\s*['""](?<href>[^'""]+)['""][^>]*>(?<text>.*?)</a>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -86,8 +91,8 @@ public static class PromotionalCourseService
     private static readonly Regex PostStartRx = new(
         @"<(?:div|article)\b[^>]*\bid\s*=\s*['""]post_(?<id>\d+)['""][^>]*>",
         RegexOptions.IgnoreCase);
-    private static readonly Regex PostBodyRx = new(
-        @"<[^>]*class\s*=\s*['""][^'""]*\bpost_body\b[^'""]*['""][^>]*>(?<body>.*?)</(?:div|article)>",
+    private static readonly Regex PostBodyStartRx = new(
+        @"<(?<tag>div|article)\b[^>]*class\s*=\s*['""][^'""]*\bpost_body\b[^'""]*['""][^>]*>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex TagRx = new(@"<[^>]+>", RegexOptions.Singleline);
 
@@ -121,20 +126,7 @@ public static class PromotionalCourseService
     public static PromotionalCourseInfo ParseCourse(
         ForumThread thread, IEnumerable<string> pageHtml)
     {
-        var bodies = new List<(string Id, string Body)>();
-        var seenPosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var html in pageHtml)
-        {
-            var starts = PostStartRx.Matches(html).Cast<Match>().ToList();
-            for (var index = 0; index < starts.Count; index++)
-            {
-                var start = starts[index];
-                var end = index + 1 < starts.Count ? starts[index + 1].Index : html.Length;
-                var body = PostBodyRx.Match(html[start.Index..end]);
-                if (!body.Success || !seenPosts.Add(start.Groups["id"].Value)) continue;
-                bodies.Add((start.Groups["id"].Value, DecodeBody(body.Groups["body"].Value)));
-            }
-        }
+        var bodies = ExtractPostBodies(pageHtml);
 
         if (bodies.Count == 0)
             throw new InvalidOperationException("No posts were recognised in the latest promotional course.");
@@ -175,7 +167,69 @@ public static class PromotionalCourseService
             prerequisites, signups.Values.ToList());
     }
 
-    public static ForumThread? FindLatestThread(string html, string forumUrl) =>
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>>
+        ParseGlossaryPrerequisites(string html)
+    {
+        var body = ExtractPostBodies([html]).FirstOrDefault().Body;
+        if (string.IsNullOrWhiteSpace(body)) return
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+        var lines = body.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => Regex.Replace(line, @"\s+", " ").Trim())
+            .Where(line => line.Length > 0)
+            .ToList();
+        var result = new Dictionary<string, IReadOnlyList<string>>(
+            StringComparer.OrdinalIgnoreCase);
+
+        for (var index = 1; index < lines.Count; index++)
+        {
+            if (!Regex.IsMatch(lines[index], @"^Details\s*:", RegexOptions.IgnoreCase))
+                continue;
+
+            var courseName = lines[index - 1];
+            for (var detailIndex = index + 1; detailIndex < lines.Count; detailIndex++)
+            {
+                if (Regex.IsMatch(lines[detailIndex], @"^Details\s*:", RegexOptions.IgnoreCase))
+                    break;
+                var match = Regex.Match(lines[detailIndex],
+                    @"^Pre-?requisites?\s*:\s*(?<value>.*)$", RegexOptions.IgnoreCase);
+                if (!match.Success) continue;
+
+                var value = match.Groups["value"].Value.Trim().Trim('.');
+                result[courseName] = value.Length == 0 ||
+                                     value.Equals("N/A", StringComparison.OrdinalIgnoreCase)
+                    ? []
+                    : SplitPrerequisites(value)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    public static bool TryGetGlossaryPrerequisites(
+        string courseTitle,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> glossary,
+        out IReadOnlyList<string> prerequisites)
+    {
+        var wanted = PromotionalCourseKey(courseTitle);
+        foreach (var entry in glossary)
+        {
+            if (!string.Equals(PromotionalCourseKey(entry.Key), wanted,
+                    StringComparison.OrdinalIgnoreCase))
+                continue;
+            prerequisites = entry.Value;
+            return true;
+        }
+
+        prerequisites = [];
+        return false;
+    }
+
+    public static IReadOnlyList<ForumThread> FindRecentThreads(
+        string html, string forumUrl, int count = 5) =>
         ForumCoursesService.ParseThreads(html, forumUrl)
             // MyBB assigns monotonically increasing numeric thread IDs. Using
             // the ID prevents a reply to an older course from making it appear
@@ -186,10 +240,15 @@ public static class PromotionalCourseService
                     @"thread-(?<id>\d+)", RegexOptions.IgnoreCase);
                 return long.TryParse(match.Groups["id"].Value, out var id) ? id : 0;
             })
-            .FirstOrDefault();
+            .Take(Math.Max(0, count))
+            .ToList();
+
+    public static ForumThread? FindLatestThread(string html, string forumUrl) =>
+        FindRecentThreads(html, forumUrl, 1).FirstOrDefault();
 
     public static IReadOnlyList<PromotionalCourseCandidate> CheckCandidates(
-        PromotionalCourseInfo course, IEnumerable<CourseRecord> records)
+        PromotionalCourseInfo course, IEnumerable<CourseRecord> records,
+        IReadOnlyDictionary<string, string>? orbatProfileLinks = null)
     {
         var roster = records
             .GroupBy(record => ForumLoaService.NormalizeName(record.Name),
@@ -209,6 +268,10 @@ public static class PromotionalCourseService
                 : ambiguous
                     ? "Multiple tracker records match this name"
                     : "";
+            var profileUrl = record?.ProfileUrl.Trim() ?? "";
+            if (profileUrl.Length == 0 && orbatProfileLinks is not null)
+                orbatProfileLinks.TryGetValue(key, out profileUrl);
+            profileUrl ??= "";
 
             var checks = course.Prerequisites.Select(prerequisite =>
             {
@@ -233,7 +296,7 @@ public static class PromotionalCourseService
             }).ToList();
 
             return new PromotionalCourseCandidate(
-                signup, record?.Section ?? "", note, checks);
+                signup, record?.Section ?? "", note, profileUrl, checks);
         }).ToList();
     }
 
@@ -253,8 +316,12 @@ public static class PromotionalCourseService
             ["basicantitank"] = "basicat",
             ["basicmachinegunner"] = "l7a2gpmg",
             ["basicmachinegunners"] = "l7a2gpmg",
+            ["basicsearcher"] = "searcher",
+            ["basicsearchers"] = "searcher",
+            ["searchers"] = "searcher",
             ["infantrylandnavigation"] = "landnav",
             ["landnavigation"] = "landnav",
+            ["basiclandnav"] = "landnav",
             ["defenceinstructortechnique"] = "dit",
             ["defenceinstructorstechnique"] = "dit",
             ["defenceinstructortechniques"] = "dit",
@@ -275,6 +342,7 @@ public static class PromotionalCourseService
             ["ammunitiontechnician"] = "ammotech",
             ["driver"] = "driving",
             ["drivers"] = "driving",
+            ["l2a1ilaworasm"] = "basicat",
         };
 
         string CanonicalKey(string value)
@@ -361,6 +429,76 @@ public static class PromotionalCourseService
             .Where(word => word is not "course" and not "badge" and not "qualified" and not "cadre")
             .ToList();
         return string.Concat(words);
+    }
+
+    private static string PromotionalCourseKey(string value)
+    {
+        var key = CourseKey(value);
+        if (key.Contains("pnco", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("potentialnoncommissioned", StringComparison.OrdinalIgnoreCase))
+            return "pnco";
+        if (key.Contains("jnco", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("juniornoncommissioned", StringComparison.OrdinalIgnoreCase))
+            return "jnco";
+        if (key.Contains("scbc", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("sectioncommander", StringComparison.OrdinalIgnoreCase))
+            return "scbc";
+        if (key.Contains("psbc", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("platoonsergeant", StringComparison.OrdinalIgnoreCase))
+            return "psbc";
+        if (key.Contains("pcbc", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("platooncommander", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("commissionedofficer", StringComparison.OrdinalIgnoreCase))
+            return "pcbc";
+        return Regex.Replace(key, @"\d+", "");
+    }
+
+    private static List<(string Id, string Body)> ExtractPostBodies(
+        IEnumerable<string> pageHtml)
+    {
+        var bodies = new List<(string Id, string Body)>();
+        var seenPosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var html in pageHtml)
+        {
+            var starts = PostStartRx.Matches(html).Cast<Match>().ToList();
+            for (var index = 0; index < starts.Count; index++)
+            {
+                var start = starts[index];
+                var end = index + 1 < starts.Count ? starts[index + 1].Index : html.Length;
+                var postHtml = html[start.Index..end];
+                var bodyStart = PostBodyStartRx.Match(postHtml);
+                if (!bodyStart.Success || !seenPosts.Add(start.Groups["id"].Value)) continue;
+                bodies.Add((start.Groups["id"].Value,
+                    DecodeBody(ExtractElementBody(postHtml, bodyStart))));
+            }
+        }
+        return bodies;
+    }
+
+    private static string ExtractElementBody(string html, Match start)
+    {
+        var tag = start.Groups["tag"].Value;
+        var tagRx = new Regex($@"</?{Regex.Escape(tag)}\b[^>]*>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        var contentStart = start.Index + start.Length;
+        var depth = 1;
+        foreach (Match tagMatch in tagRx.Matches(html, contentStart))
+        {
+            if (tagMatch.Value.StartsWith("</", StringComparison.Ordinal))
+            {
+                depth--;
+                if (depth == 0)
+                    return html.Substring(contentStart, tagMatch.Index - contentStart);
+            }
+            else if (!tagMatch.Value.EndsWith("/>", StringComparison.Ordinal))
+            {
+                depth++;
+            }
+        }
+
+        // Malformed user-authored HTML occasionally reaches MyBB. Retaining
+        // the rest of the post is safer than silently dropping later courses.
+        return html[contentStart..];
     }
 
     private static string DecodeBody(string html)

@@ -21,6 +21,7 @@ public class CourseRecord
 {
     public string Section { get; init; } = "";
     public string Name { get; init; } = "";
+    public string ProfileUrl { get; init; } = "";
     public string Acmt { get; init; } = "";
     /// <summary>CourseName -> "Complete" | "Not Done" | "Advanced" | ...</summary>
     public Dictionary<string, string> Courses { get; init; } = new();

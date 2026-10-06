@@ -43,6 +43,19 @@
                         <TextBlock Text="{Binding Updates.StatusMessage}" FontSize="13"
                                    Foreground="{StaticResource TextDim}" TextWrapping="Wrap"
                                    Margin="0,0,0,8"/>
+                        <Border Background="{StaticResource InputBg}"
+                                BorderBrush="{StaticResource InputBorder}" BorderThickness="1"
+                                CornerRadius="5" Padding="12,10" Margin="0,0,0,10"
+                                Visibility="{Binding Updates.HasReleaseNotes, Converter={StaticResource BooleanToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Updates.ReleaseNotesTitle}"
+                                           Foreground="{StaticResource Accent}" FontSize="13.5"
+                                           FontWeight="Bold" Margin="0,0,0,6"/>
+                                <TextBlock Text="{Binding Updates.ReleaseNotes}"
+                                           Foreground="{StaticResource TextMain}" FontSize="13"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Check for updates" Padding="12,6"
                                     Command="{Binding Updates.CheckForUpdatesCommand}"/>

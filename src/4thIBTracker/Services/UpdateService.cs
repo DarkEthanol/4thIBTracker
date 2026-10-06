@@ -19,6 +19,16 @@ public sealed record UpdateRelease(
     Uri? ReleasePage,
     string ReleaseNotes);
 
+public sealed record UpdateReleaseSummary(
+    Version Version,
+    string Tag,
+    Uri? ReleasePage,
+    string ReleaseNotes);
+
+public sealed record UpdateCheckResult(
+    UpdateRelease? AvailableRelease,
+    UpdateReleaseSummary? DisplayRelease);
+
 /// <summary>
 /// Checks a public GitHub repository for stable releases and installs the
 /// single-file Windows executable published by this project.
@@ -60,6 +70,10 @@ public sealed class UpdateService
     }
 
     public async Task<UpdateRelease?> CheckForUpdateAsync(
+        CancellationToken cancellationToken = default) =>
+        (await CheckForUpdateDetailsAsync(cancellationToken)).AvailableRelease;
+
+    public async Task<UpdateCheckResult> CheckForUpdateDetailsAsync(
         CancellationToken cancellationToken = default)
     {
         if (!IsConfigured)
@@ -82,12 +96,26 @@ public sealed class UpdateService
             ?? throw new InvalidDataException("GitHub returned an empty release response.");
 
         if (release.Draft || release.Prerelease)
-            return null;
+            return new UpdateCheckResult(null, null);
         if (!TryParseReleaseVersion(release.TagName, out var version))
             throw new InvalidDataException(
                 $"The latest release tag '{release.TagName}' is not in vMAJOR.MINOR.PATCH format.");
+
+        var summary = new UpdateReleaseSummary(
+            version,
+            release.TagName,
+            Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out var summaryPage)
+                ? summaryPage
+                : null,
+            release.Body ?? "");
         if (version <= CurrentVersion)
-            return null;
+        {
+            if (version < CurrentVersion)
+                return new UpdateCheckResult(null,
+                    await TryGetCurrentReleaseSummaryAsync(
+                        parts[0], parts[1], cancellationToken));
+            return new UpdateCheckResult(null, summary);
+        }
 
         var executable = release.Assets.SingleOrDefault(asset =>
             asset.Name.Equals(ExecutableAssetName, StringComparison.OrdinalIgnoreCase));
@@ -117,11 +145,37 @@ public sealed class UpdateService
                     "The publisher checksum does not match GitHub's release-asset digest.");
         }
 
-        return new UpdateRelease(
+        var available = new UpdateRelease(
             version,
             release.TagName,
             downloadUri,
             expectedHash,
+            Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out var page) ? page : null,
+            release.Body ?? "");
+        return new UpdateCheckResult(available, summary);
+    }
+
+    private async Task<UpdateReleaseSummary?> TryGetCurrentReleaseSummaryAsync(
+        string owner, string repository, CancellationToken cancellationToken)
+    {
+        var tag = $"v{CurrentVersionText}";
+        var apiUrl = $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/" +
+                     $"{Uri.EscapeDataString(repository)}/releases/tags/{Uri.EscapeDataString(tag)}";
+        using var response = await _http.GetAsync(apiUrl, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+
+        await using var jsonStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(
+            jsonStream, cancellationToken: cancellationToken);
+        if (release is null || release.Draft || release.Prerelease ||
+            !TryParseReleaseVersion(release.TagName, out var version) ||
+            version != CurrentVersion)
+            return null;
+
+        return new UpdateReleaseSummary(
+            version,
+            release.TagName,
             Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out var page) ? page : null,
             release.Body ?? "");
     }

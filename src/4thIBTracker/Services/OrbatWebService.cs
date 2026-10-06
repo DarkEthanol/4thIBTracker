@@ -17,7 +17,8 @@ public static class OrbatWebService
     private static readonly Regex HeadingRx = new(
         @"<h[3-5][^>]*>(?<text>.+?)</h[3-5]>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex UserLinkRx = new(
-        @"<a[^>]*href=""[^""]*user-\d+\.html""[^>]*>(?<name>[^<]+)</a>", RegexOptions.IgnoreCase);
+        @"<a[^>]*href=""(?<href>[^""]*user-\d+\.html[^""]*)""[^>]*>(?<name>.*?)</a>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex TagRx = new(@"<[^>]+>");
     private static readonly Regex NameRx = new(
         @"([\p{L}]\.\s*[\p{L}\p{M}'’\-]+(?:\s+[\p{L}\p{M}'’\-]+)*)\s*$");
@@ -27,6 +28,34 @@ public static class OrbatWebService
     {
         var html = await Http.GetStringAsync(orbatUrl);
         return ParsePlatoonHtml(html, platoon);
+    }
+
+    /// <summary>
+    /// Returns every website ORBAT member's profile URL, keyed by the same
+    /// rank-insensitive name normalisation used for course and forum matching.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, string>> FetchProfileLinksAsync(
+        string orbatUrl)
+    {
+        var html = await Http.GetStringAsync(orbatUrl);
+        return ParseProfileLinksHtml(html, orbatUrl);
+    }
+
+    internal static IReadOnlyDictionary<string, string> ParseProfileLinksHtml(
+        string html, string orbatUrl)
+    {
+        var profiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in UserLinkRx.Matches(html))
+        {
+            var name = DecodeText(match.Groups["name"].Value);
+            var key = ForumLoaService.NormalizeName(name);
+            if (key.Length == 0 || profiles.ContainsKey(key)) continue;
+
+            var href = WebUtility.HtmlDecode(match.Groups["href"].Value);
+            if (Uri.TryCreate(new Uri(orbatUrl), href, out var profile))
+                profiles[key] = profile.AbsoluteUri;
+        }
+        return profiles;
     }
 
     internal static Dictionary<string, List<string>> ParsePlatoonHtml(string html, int platoon)
@@ -65,10 +94,10 @@ public static class OrbatWebService
             if (m.Success) sections[current].Add(m.Groups[1].Value);
         }
         return sections;
-
-        static string DecodeText(string value) =>
-            WebUtility.HtmlDecode(TagRx.Replace(value, "")).Trim();
     }
+
+    private static string DecodeText(string value) =>
+        WebUtility.HtmlDecode(TagRx.Replace(value, "")).Trim();
 
     public record OrbatMismatch(string Name, string Detail);
 

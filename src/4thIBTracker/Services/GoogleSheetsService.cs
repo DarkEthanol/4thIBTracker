@@ -374,7 +374,7 @@ public class GoogleSheetsService
         var svc = await GetServiceAsync();
         var req = svc.Spreadsheets.Get(spreadsheetId);
         req.Ranges = range;
-        req.Fields = "sheets(data(rowData(values(formattedValue,hyperlink))))";
+        req.Fields = "sheets(data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))";
         var resp = await req.ExecuteAsync();
 
         var rows = resp.Sheets?.FirstOrDefault()?.Data?.FirstOrDefault()?.RowData;
@@ -382,9 +382,57 @@ public class GoogleSheetsService
 
         return rows.Select(r =>
             (r.Values ?? new List<CellData>()).Select(c =>
-                (c.FormattedValue ?? "", (string?)c.Hyperlink)).ToArray()
+                (c.FormattedValue ?? "", CellLink(c))).ToArray()
         ).ToArray();
     }
+
+    /// <summary>
+    /// Reads displayed text and hyperlinks from complete tabs in one request.
+    /// This preserves row/column positions so a parser can attach the link from
+    /// a member's name cell to that member's record.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, (string Text, string? Url)[][]>>
+        ReadTabLinksAsync(string spreadsheetId, IEnumerable<string> tabNames)
+    {
+        var tabs = tabNames
+            .Where(tab => !string.IsNullOrWhiteSpace(tab))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var result = new Dictionary<string, (string Text, string? Url)[][]>(
+            StringComparer.OrdinalIgnoreCase);
+        if (tabs.Count == 0) return result;
+
+        var svc = await GetServiceAsync();
+        var request = svc.Spreadsheets.Get(spreadsheetId);
+        request.Ranges = tabs
+            .Select(tab => $"'{tab.Replace("'", "''")}'")
+            .ToList();
+        request.Fields = "sheets(properties(title),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))";
+        var response = await request.ExecuteAsync();
+
+        foreach (var sheet in response.Sheets ?? [])
+        {
+            var title = sheet.Properties?.Title;
+            if (string.IsNullOrWhiteSpace(title)) continue;
+            var rows = sheet.Data?.FirstOrDefault()?.RowData;
+            result[title] = rows is null
+                ? []
+                : rows.Select(row =>
+                    (row.Values ?? new List<CellData>()).Select(cell =>
+                        (cell.FormattedValue ?? "", CellLink(cell))).ToArray())
+                    .ToArray();
+        }
+
+        foreach (var tab in tabs) result.TryAdd(tab, []);
+        return result;
+    }
+
+    private static string? CellLink(CellData cell) =>
+        !string.IsNullOrWhiteSpace(cell.Hyperlink)
+            ? cell.Hyperlink
+            : cell.TextFormatRuns?
+                .Select(run => run.Format?.Link?.Uri)
+                .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
 
     public async Task<(string Text, string? Url)[][]> ReadLinksFromConfiguredTabAsync(
         string spreadsheetId, string configuredTab, string unqualifiedRange)

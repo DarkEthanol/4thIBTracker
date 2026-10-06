@@ -28,6 +28,16 @@ Check(unicodeOrbat["1 Section"].Contains("V. Bjørn"),
     "Unicode ORBAT surname parsing");
 Check(unicodeOrbat["1 Section"].Contains("J. D'Arcy"),
     "ORBAT HTML entity decoding");
+var orbatProfileLinks = OrbatWebService.ParseProfileLinksHtml("""
+    <h3>1 Platoon</h3>
+    <a href="user-3891.html"><span>Pte. V. Bjørn</span></a>
+    <a href="/user-4000.html">Pte. J. D&apos;Arcy</a>
+    """, "https://unit.invalid/orbat.php");
+Check(orbatProfileLinks[ForumLoaService.NormalizeName("V. Bjørn")] ==
+      "https://unit.invalid/user-3891.html" &&
+      orbatProfileLinks[ForumLoaService.NormalizeName("J. D'Arcy")] ==
+      "https://unit.invalid/user-4000.html",
+    "ORBAT profile links are retained for rank-insensitive member matching");
 
 var canonicallyEquivalent = OrbatWebService.Compare(
     new() { ["HQ"] = ["V. Éclair"] },
@@ -593,14 +603,24 @@ Check(PromotionalCourseService.FindPromotionalForumUrl(
           promotionalSource, "https://unit.invalid/forum-16.html") ==
       "https://unit.invalid/forum-193.html",
     "promotional-course forum is discovered rather than hard-coded");
-var latestPromotional = PromotionalCourseService.FindLatestThread("""
+var recentPromotional = PromotionalCourseService.FindRecentThreads("""
     <a href="thread-200.html">Older course bumped today</a>
     <span>Topic started by <a href="member.php?id=1">Trainer One</a></span>
-    <a href="thread-205.html">New promotional course</a>
+    <a href="thread-201.html">Course 201</a>
     <span>Topic started by <a href="member.php?id=2">Trainer Two</a></span>
-    """, "https://unit.invalid/forum-193.html");
-Check(latestPromotional?.Url == "https://unit.invalid/thread-205.html",
-    "latest promotional course uses creation order rather than last-reply bump order");
+    <a href="thread-202.html">Course 202</a>
+    <span>Topic started by <a href="member.php?id=3">Trainer Three</a></span>
+    <a href="thread-203.html">Course 203</a>
+    <span>Topic started by <a href="member.php?id=4">Trainer Four</a></span>
+    <a href="thread-204.html">Course 204</a>
+    <span>Topic started by <a href="member.php?id=5">Trainer Five</a></span>
+    <a href="thread-205.html">New promotional course</a>
+    <span>Topic started by <a href="member.php?id=6">Trainer Six</a></span>
+    """, "https://unit.invalid/forum-193.html", 5);
+Check(recentPromotional.Count == 5 &&
+      recentPromotional[0].Url == "https://unit.invalid/thread-205.html" &&
+      recentPromotional[^1].Url == "https://unit.invalid/thread-201.html",
+    "five recent promotional courses use creation order rather than last-reply bump order");
 
 var promotionalHtml = """
     <div class="posts2 post classic" id="post_1">
@@ -629,6 +649,39 @@ Check(promotionalInfo.Prerequisites.Count == 5 &&
       promotionalInfo.DateText == "06/10/2026",
     "promotional course details, prerequisites and signups parsing");
 
+var glossaryHtml = """
+    <div id="post_105102">
+      <div class="post_body">
+        Phase 2 Courses<br>
+        <div class="spoiler"><div class="spoiler_content">Archived course list</div></div>
+        Promotional Courses (CLM)<br><br>
+        Potential Non-Commissioned Officers Course (PNCO)<br>
+        Details: PNCO details.<br>
+        Open to: All members.<br>
+        Pre-requisites: L7A2 GPMG Course, L2A1 ASM/ILAW Course, K170A1 NLAW Course, Driving Course, Signals Course.<br>
+        Supersedes: N/A.<br><br>
+        Junior Non-Commissioned Officers Course (JNCO)<br>
+        Details: JNCO details.<br>
+        Open to: All members.<br>
+        Pre-requisites: PNCO, Searchers Course, Signals Course &amp; Basic Land Nav.<br>
+        Supersedes: N/A.
+      </div>
+    </div>
+    """;
+var glossaryPrerequisites = PromotionalCourseService.ParseGlossaryPrerequisites(glossaryHtml);
+var matchedPncoGlossary = PromotionalCourseService.TryGetGlossaryPrerequisites(
+    "Potential Non-Commissioned Officer Course 10/26",
+    glossaryPrerequisites, out var pncoGlossaryPrerequisites);
+Check(glossaryPrerequisites.Count == 2 && matchedPncoGlossary &&
+      pncoGlossaryPrerequisites.Count == 5 &&
+      pncoGlossaryPrerequisites.Contains("Driving Course"),
+    "promotional prerequisites come from the canonical Course Glossary by course name");
+Check(PromotionalCourseService.TryGetGlossaryPrerequisites(
+          "JNCO Course - October 2026", glossaryPrerequisites, out var jncoPrerequisites) &&
+      jncoPrerequisites.Contains("Searchers Course") &&
+      jncoPrerequisites.Contains("Basic Land Nav"),
+    "Course Glossary lookup recognises promotional course acronyms");
+
 var bgCourseRows = new List<IList<object>>
 {
     new List<object> { "4-1" },
@@ -636,15 +689,30 @@ var bgCourseRows = new List<IList<object>>
     new List<object> { "", "Nr.", "Name/Rank", "ACMT", "L7A2 GPMG", "Basic AT", "Driving", "Signals" },
     new List<object> { "", "1", "Pte. V. Example", "58", "Complete", "Complete", "Complete", "Complete" },
 };
-var bgCourseRecords = SheetParsers.ParseCourseRosterTab(bgCourseRows, "4 Platoon");
+var bgCourseLinks = new (string Text, string? Url)[][]
+{
+    [],
+    [],
+    [],
+    [("", null), ("1", null), ("Pte. V. Example", "https://unit.invalid/user-100.html")],
+};
+var bgCourseRecords = SheetParsers.ParseCourseRosterTab(
+    bgCourseRows, "4 Platoon", bgCourseLinks);
+var fallbackProfileLinks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+{
+    [ForumLoaService.NormalizeName("V. Example")] = "https://unit.invalid/user-999.html",
+    [ForumLoaService.NormalizeName("D. Missing")] = "https://unit.invalid/user-200.html",
+};
 var promotionalChecks = PromotionalCourseService.CheckCandidates(
-    promotionalInfo, bgCourseRecords);
+    promotionalInfo, bgCourseRecords, fallbackProfileLinks);
 Check(bgCourseRecords.Count == 1 &&
       promotionalChecks[0].OverallLabel == "Has prerequisites" &&
       promotionalChecks[0].Prerequisites.All(item => item.Result == PrerequisiteResult.Met) &&
+      promotionalChecks[0].ProfileUrl == "https://unit.invalid/user-100.html" &&
       promotionalChecks[1].OverallLabel == "Needs review" &&
+      promotionalChecks[1].ProfileUrl == "https://unit.invalid/user-200.html" &&
       promotionalChecks[1].TrackerNote.Contains("Not found", StringComparison.OrdinalIgnoreCase),
-    "BG tracker eligibility check uses official Basic AT aggregation and flags unknown members");
+    "BG tracker checks retain tracker profile links and use ORBAT links for unknown members");
 var joinedInitialCourse = promotionalInfo with
 {
     Signups =
@@ -670,6 +738,11 @@ Check(PromotionalCourseService.MatchTrackerCourse(
       PromotionalCourseService.MatchTrackerCourse(
           "Drivers Course", ["Driving", "Signals"]) == "Driving",
     "Driving and Drivers course headings are equivalent");
+Check(PromotionalCourseService.MatchTrackerCourse(
+          "Searchers Course", ["Searcher", "Land Nav"]) == "Searcher" &&
+      PromotionalCourseService.MatchTrackerCourse(
+          "Basic Land Nav", ["Searcher", "Land Nav"]) == "Land Nav",
+    "Course Glossary Searchers and Basic Land Nav names match tracker headings");
 
 var checksum = new string('a', 64);
 Check(UpdateService.ParseChecksum($"{checksum}  4thIBTracker.exe") == checksum,
@@ -720,9 +793,13 @@ try
 
     var service = new UpdateService(
         "example/tracker", new Version(1, 0, 0), http, temporaryRoot);
-    var release = await service.CheckForUpdateAsync();
+    var updateDetails = await service.CheckForUpdateDetailsAsync();
+    var release = updateDetails.AvailableRelease;
     Check(release?.Version == new Version(1, 2, 0), "newer release discovery");
     Check(release?.Sha256 == payloadHash, "GitHub/checksum agreement");
+    Check(updateDetails.DisplayRelease?.Version == new Version(1, 2, 0) &&
+          updateDetails.DisplayRelease.ReleaseNotes == "Test release",
+        "available update exposes the next version's release notes");
 
     if (release is not null)
     {
@@ -734,8 +811,16 @@ try
 
     var currentService = new UpdateService(
         "example/tracker", new Version(1, 2, 0), http, temporaryRoot);
-    Check(await currentService.CheckForUpdateAsync() is null,
+    var currentDetails = await currentService.CheckForUpdateDetailsAsync();
+    Check(currentDetails.AvailableRelease is null,
         "current release is not offered again");
+    Check(currentDetails.DisplayRelease?.Version == new Version(1, 2, 0) &&
+          currentDetails.DisplayRelease.ReleaseNotes == "Test release",
+        "up-to-date check exposes the current version's release notes");
+    Check(UpdateViewModel.FormatReleaseNotes("## Changes\n\n- Fixed `courses`\n- See [details](https://example.invalid)") ==
+          string.Join(Environment.NewLine,
+              "Changes", "", "• Fixed courses", "• See details"),
+        "GitHub Markdown release notes are made readable in the desktop UI");
 
     var replacement = Path.Combine(temporaryRoot, "new.exe");
     var target = Path.Combine(temporaryRoot, "installed.exe");

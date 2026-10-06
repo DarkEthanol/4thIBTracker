@@ -44,8 +44,7 @@
                   HeadersVisibility="Column" GridLinesVisibility="Vertical"
                   VerticalGridLinesBrush="#30FFFFFF"
                   Background="Transparent"
-                  RowBackground="{StaticResource BgPanel}"
-                  AlternatingRowBackground="#2B2F33"
+                  AlternationCount="2"
                   Foreground="{StaticResource TextMain}"
                   BorderThickness="0"
                   RowHeight="32" FontSize="15"
@@ -54,6 +53,29 @@
                   CanUserResizeRows="False" CanUserReorderColumns="False"
                   SelectionMode="Single" SelectionUnit="FullRow"
                   EnableColumnVirtualization="False" EnableRowVirtualization="True">
+            <DataGrid.Resources>
+                <!-- Let the selected row's background show through every cell. -->
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="Transparent"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#E8E6E3"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#E8E6E3"/>
+            </DataGrid.Resources>
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Background" Value="{StaticResource BgPanel}"/>
+                    <Setter Property="BorderBrush" Value="Transparent"/>
+                    <Setter Property="BorderThickness" Value="1,1,1,1"/>
+                    <Style.Triggers>
+                        <Trigger Property="AlternationIndex" Value="1">
+                            <Setter Property="Background" Value="#2B2F33"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#5365814E"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
             <DataGrid.GroupStyle>
                 <GroupStyle>
                     <GroupStyle.ContainerStyle>
