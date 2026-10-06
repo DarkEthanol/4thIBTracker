@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v6
@@ -45,9 +47,27 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $assetDirectory = "artifacts/release/$tag"
+          $previousTag = git tag --sort=-v:refname --merged $tag |
+            Where-Object { $_ -match '^v\d+\.\d+\.\d+$' -and $_ -ne $tag } |
+            Select-Object -First 1
+          if ($previousTag) {
+            $changes = @(git log --format="- %s" "$previousTag..$tag")
+          }
+          else {
+            $changes = @(git log -1 --format="- %s" $tag)
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not generate release notes for $tag."
+          }
+          if ($changes.Count -eq 0) {
+            $changes = @("- Release $tag")
+          }
+          $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          @("## Changes", "") + $changes |
+            Set-Content -LiteralPath $notesFile -Encoding utf8
           gh release create $tag `
             "$assetDirectory/4thIBTracker.exe#4thIB Tracker for Windows x64" `
             "$assetDirectory/4thIBTracker.exe.sha256#SHA-256 checksum" `
             --verify-tag `
-            --generate-notes `
+            --notes-file $notesFile `
             --latest
