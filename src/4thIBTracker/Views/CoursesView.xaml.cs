@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Net;
+using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -6,7 +9,9 @@ using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using FourthIBTracker.Services;
 using FourthIBTracker.ViewModels;
+using Microsoft.Web.WebView2.Core;
 
 namespace FourthIBTracker.Views;
 
@@ -14,12 +19,18 @@ public partial class CoursesView : UserControl
 {
     private readonly CoursesViewModel _vm;
     private DataGridColumnHeader? _hoveredHeader;
+    private bool _webViewReady;
+    private readonly SemaphoreSlim _webViewLock = new(1, 1);
+    private readonly SemaphoreSlim _clientLock = new(1, 1);
+    private readonly SemaphoreSlim _navigationLock = new(1, 1);
+    private HttpClient? _forumClient;
 
     public CoursesView(CoursesViewModel vm)
     {
         InitializeComponent();
         _vm = vm;
         DataContext = vm;
+        vm.FetchProfileHtml = FetchProfileHtmlAsync;
         vm.DataLoaded += BuildColumns;
         Grid.MouseMove += CoursesGrid_MouseMove;
         Grid.MouseLeave += (_, _) => SetHoveredColumn(null);
@@ -34,6 +45,147 @@ public partial class CoursesView : UserControl
             if (_vm.Records.Count == 0 && !_vm.IsLoading)
                 await _vm.LoadAsync();
         };
+    }
+
+    private async Task EnsureWebViewAsync()
+    {
+        if (_webViewReady) return;
+        await _webViewLock.WaitAsync();
+        try
+        {
+            if (_webViewReady) return;
+            var environment = await WebViewEnvironmentService.GetAsync();
+            await Fetcher.EnsureCoreWebView2Async(environment);
+            _webViewReady = true;
+        }
+        finally
+        {
+            _webViewLock.Release();
+        }
+    }
+
+    private async Task<string> FetchProfileHtmlAsync(
+        string url, CancellationToken cancellationToken)
+    {
+        await EnsureWebViewAsync();
+
+        HttpClient? client = null;
+        try
+        {
+            client = await GetForumClientAsync(url);
+            var html = await client.GetStringAsync(url, cancellationToken);
+            if (ForumCoursesService.LooksLoggedOut(html))
+                throw new HttpRequestException(
+                    "The profile request did not receive the browser login session.");
+            return html;
+        }
+        catch when (!cancellationToken.IsCancellationRequested)
+        {
+            await ResetForumClientAsync(client);
+            return await NavigateHtmlAsync(url, cancellationToken);
+        }
+    }
+
+    private async Task<HttpClient> GetForumClientAsync(string url)
+    {
+        if (_forumClient is not null) return _forumClient;
+
+        await _clientLock.WaitAsync();
+        try
+        {
+            if (_forumClient is not null) return _forumClient;
+
+            var cookies = await Fetcher.CoreWebView2.CookieManager.GetCookiesAsync(url);
+            var cookieContainer = new CookieContainer();
+            foreach (var cookie in cookies)
+            {
+                try
+                {
+                    cookieContainer.Add(new Cookie(
+                        cookie.Name,
+                        cookie.Value,
+                        string.IsNullOrWhiteSpace(cookie.Path) ? "/" : cookie.Path,
+                        cookie.Domain)
+                    {
+                        HttpOnly = cookie.IsHttpOnly,
+                        Secure = cookie.IsSecure,
+                    });
+                }
+                catch (CookieException)
+                {
+                    // Keep all cookies that are valid for a normal HTTP request.
+                }
+            }
+
+            _forumClient = new HttpClient(new HttpClientHandler
+            {
+                CookieContainer = cookieContainer,
+                UseCookies = true,
+                AutomaticDecompression = DecompressionMethods.All,
+            }) { Timeout = TimeSpan.FromSeconds(20) };
+            var userAgent = Fetcher.CoreWebView2.Settings.UserAgent;
+            if (!string.IsNullOrWhiteSpace(userAgent))
+                _forumClient.DefaultRequestHeaders.TryAddWithoutValidation(
+                    "User-Agent", userAgent);
+            return _forumClient;
+        }
+        finally
+        {
+            _clientLock.Release();
+        }
+    }
+
+    private async Task ResetForumClientAsync(HttpClient? failedClient)
+    {
+        if (failedClient is null) return;
+        await _clientLock.WaitAsync();
+        try
+        {
+            if (!ReferenceEquals(_forumClient, failedClient)) return;
+            _forumClient = null;
+            failedClient.Dispose();
+        }
+        finally
+        {
+            _clientLock.Release();
+        }
+    }
+
+    private async Task<string> NavigateHtmlAsync(
+        string url, CancellationToken cancellationToken)
+    {
+        await EnsureWebViewAsync();
+        await _navigationLock.WaitAsync(cancellationToken);
+        try
+        {
+            var completion = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            void Handler(object? sender, CoreWebView2NavigationCompletedEventArgs args) =>
+                completion.TrySetResult(args.IsSuccess);
+
+            Fetcher.CoreWebView2.NavigationCompleted += Handler;
+            try
+            {
+                Fetcher.CoreWebView2.Navigate(url);
+                var timeout = Task.Delay(TimeSpan.FromSeconds(20), cancellationToken);
+                var done = await Task.WhenAny(completion.Task, timeout);
+                if (done != completion.Task || !await completion.Task)
+                    throw new HttpRequestException(
+                        $"Couldn't load {url} through the browser session.");
+
+                var json = await Fetcher.CoreWebView2.ExecuteScriptAsync(
+                    "document.documentElement.outerHTML");
+                return JsonSerializer.Deserialize<string>(json) ?? "";
+            }
+            finally
+            {
+                Fetcher.CoreWebView2.NavigationCompleted -= Handler;
+            }
+        }
+        finally
+        {
+            _navigationLock.Release();
+        }
     }
 
     private void CoursesGrid_MouseMove(object sender, MouseEventArgs e)

@@ -92,13 +92,32 @@ public static class OrbatWebService
         FetchProfileQualificationResultsAsync(
             IEnumerable<string> profileUrls,
             CancellationToken cancellationToken = default)
+        => await FetchProfileQualificationResultsAsync(
+            profileUrls,
+            (url, token) => Http.GetStringAsync(url, token),
+            maxConcurrency: 8,
+            cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Reads profile qualifications through a caller-supplied fetcher. Views
+    /// use this overload to reuse the authenticated forum browser session;
+    /// unauthenticated profile requests currently receive HTTP 500 from the
+    /// website even though the same profile works in a logged-in browser.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, ProfileQualificationFetchResult>>
+        FetchProfileQualificationResultsAsync(
+            IEnumerable<string> profileUrls,
+            Func<string, CancellationToken, Task<string>> fetchHtml,
+            int maxConcurrency = 4,
+            CancellationToken cancellationToken = default)
     {
         var urls = profileUrls
             .Where(url => !string.IsNullOrWhiteSpace(url))
             .Select(url => url.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        using var gate = new SemaphoreSlim(8, 8);
+        maxConcurrency = Math.Max(1, maxConcurrency);
+        using var gate = new SemaphoreSlim(maxConcurrency, maxConcurrency);
         var reads = urls.Select(async url =>
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
@@ -109,7 +128,7 @@ public static class OrbatWebService
             await gate.WaitAsync(cancellationToken);
             try
             {
-                var html = await Http.GetStringAsync(url, cancellationToken);
+                var html = await fetchHtml(url, cancellationToken);
                 if (!PromotionalCourseService.HasProfileQualificationSection(html))
                     return (Url: url, Result: new ProfileQualificationFetchResult(
                         [], "qualification section missing"));

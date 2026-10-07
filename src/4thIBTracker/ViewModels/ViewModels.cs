@@ -772,6 +772,7 @@ public partial class CoursesViewModel : ObservableObject
     [ObservableProperty] private bool discrepancyCheckComplete;
 
     private List<CourseRecord> _all = new();
+    public Func<string, CancellationToken, Task<string>>? FetchProfileHtml { get; set; }
 
     public CoursesViewModel(GoogleSheetsService sheets, AppConfig config)
     { _sheets = sheets; _config = config; }
@@ -850,7 +851,10 @@ public partial class CoursesViewModel : ObservableObject
             .ToList();
 
         DiscrepancyStatus = $"Comparing {urls.Count} linked forum profile(s) with the course tracker…";
-        var profileTask = OrbatWebService.FetchProfileQualificationResultsAsync(urls);
+        var profileTask = FetchProfileHtml is null
+            ? OrbatWebService.FetchProfileQualificationResultsAsync(urls)
+            : OrbatWebService.FetchProfileQualificationResultsAsync(
+                urls, FetchProfileHtml, maxConcurrency: 3);
         Task<IReadOnlyList<OrbatCourseMember>>? orbatTask = null;
         if (!string.IsNullOrWhiteSpace(_config.OrbatUrl))
             orbatTask = OrbatWebService.FetchPlatoonCourseMembersAsync(

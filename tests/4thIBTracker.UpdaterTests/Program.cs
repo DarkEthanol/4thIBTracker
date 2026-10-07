@@ -769,6 +769,26 @@ var profileQualifications =
     {
         ["https://unit.invalid/user-100.html"] = exampleProfileQualifications,
     };
+var authenticatedProfileReads = 0;
+var injectedProfileResults =
+    await OrbatWebService.FetchProfileQualificationResultsAsync(
+        ["https://unit.invalid/user-100.html"],
+        (url, cancellationToken) =>
+        {
+            authenticatedProfileReads++;
+            return Task.FromResult("""
+                <div id="teachingqual">
+                  <img src="/images/tradebadges/Basic-Anti-Tank.png"
+                       alt="Basic Anti-Tank Course">
+                </div>
+                """);
+        },
+        maxConcurrency: 1);
+Check(authenticatedProfileReads == 1 &&
+      injectedProfileResults["https://unit.invalid/user-100.html"].Success &&
+      injectedProfileResults["https://unit.invalid/user-100.html"]
+          .Qualifications.Single().CourseName == "Basic Anti-Tank Course",
+    "profile qualification checks can use an authenticated caller-supplied fetcher");
 var promotionalChecks = PromotionalCourseService.CheckCandidates(
     promotionalInfo, bgCourseRecords, fallbackProfileLinks, profileQualifications);
 Check(bgCourseRecords.Count == 1 &&
