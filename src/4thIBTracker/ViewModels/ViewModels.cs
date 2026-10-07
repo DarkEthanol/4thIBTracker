@@ -850,7 +850,12 @@ public partial class CoursesViewModel : ObservableObject
             .ToList();
 
         DiscrepancyStatus = $"Comparing {urls.Count} linked forum profile(s) with the course tracker…";
-        var profileResults = await OrbatWebService.FetchProfileQualificationResultsAsync(urls);
+        var profileTask = OrbatWebService.FetchProfileQualificationResultsAsync(urls);
+        Task<IReadOnlyList<OrbatCourseMember>>? orbatTask = null;
+        if (!string.IsNullOrWhiteSpace(_config.OrbatUrl))
+            orbatTask = OrbatWebService.FetchPlatoonCourseMembersAsync(
+                _config.OrbatUrl, _config.Platoon.Number);
+        var profileResults = await profileTask;
 
         Discrepancies.Clear();
         var checkedSoldiers = 0;
@@ -876,6 +881,29 @@ public partial class CoursesViewModel : ObservableObject
                 Discrepancies.Add(discrepancy);
         }
 
+        var orbatStatus = "";
+        var orbatCheckComplete = false;
+        if (orbatTask is null)
+        {
+            orbatStatus = " Website ORBAT is not configured; membership was not checked.";
+        }
+        else
+        {
+            try
+            {
+                var orbatMembers = await orbatTask;
+                orbatCheckComplete = true;
+                foreach (var discrepancy in
+                         PromotionalCourseService.FindOrbatMembershipDiscrepancies(
+                             _all, orbatMembers))
+                    Discrepancies.Add(discrepancy);
+            }
+            catch (Exception ex)
+            {
+                orbatStatus = $" ORBAT membership could not be checked ({ex.Message}).";
+            }
+        }
+
         var unmappedCourses = CourseNames
             .Where(course => !PromotionalCourseService.CanMatchProfileCourse(course))
             .ToList();
@@ -886,8 +914,9 @@ public partial class CoursesViewModel : ObservableObject
                                 : "") +
                             (unmappedCourses.Count > 0
                                 ? $" No website badge mapping: {string.Join(", ", unmappedCourses)}."
-                                : "");
-        DiscrepancyCheckComplete = checkedSoldiers > 0;
+                                : "") +
+                            orbatStatus;
+        DiscrepancyCheckComplete = checkedSoldiers > 0 || orbatCheckComplete;
     }
 
     [RelayCommand]
@@ -907,6 +936,171 @@ public partial class CoursesViewModel : ObservableObject
             Error = ex.Message;
         }
     }
+}
+
+// ===================================================================== Other Courses
+public partial class OtherCoursesViewModel : ObservableObject
+{
+    private readonly GoogleSheetsService _sheets;
+    private readonly AppConfig _config;
+    private readonly Dictionary<string, (List<CourseRecord> Records, List<string> Courses)>
+        _tabData = new(StringComparer.OrdinalIgnoreCase);
+    private List<CourseRecord> _all = [];
+    private bool _suppressTabSelection;
+
+    public ObservableCollection<string> Tabs { get; } = new();
+    public ObservableCollection<CourseRecord> Records { get; } = new();
+    public ObservableCollection<string> CourseNames { get; } = new();
+    public ObservableCollection<string> FilterOptions { get; } = new();
+
+    [ObservableProperty] private bool isLoading;
+    [ObservableProperty] private string? error;
+    [ObservableProperty] private string selectedTab = "";
+    [ObservableProperty] private string selectedFilter = "All courses";
+
+    public event Action? DataLoaded;
+
+    public OtherCoursesViewModel(GoogleSheetsService sheets, AppConfig config)
+    {
+        _sheets = sheets;
+        _config = config;
+    }
+
+    [RelayCommand]
+    public async Task LoadAsync()
+    {
+        IsLoading = true;
+        Error = null;
+        try
+        {
+            var sheet = _config.Sheet("SectionCourses");
+            var linkedTabs = await _sheets.ReadAllTabLinksAsync(
+                sheet.Id, includeHidden: false);
+            var currentTabNames = new HashSet<string>(new[]
+                {
+                    _config.Platoon.Name,
+                    _config.Platoon.ShortName,
+                    sheet.Tab,
+                }
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim()), StringComparer.OrdinalIgnoreCase);
+
+            _tabData.Clear();
+            foreach (var (tab, linkedCells) in linkedTabs)
+            {
+                if (currentTabNames.Contains(tab.Trim())) continue;
+                IList<IList<object>> rows = linkedCells
+                    .Select(row => (IList<object>)row
+                        .Select(cell => (object)cell.Text)
+                        .ToList())
+                    .ToList();
+
+                List<CourseRecord> records;
+                List<string> courses;
+                var firstWord = tab.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .FirstOrDefault() ?? "";
+                if (tab.Contains("Platoon", StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(firstWord, out var platoon))
+                {
+                    try
+                    {
+                        (records, courses) = SheetParsers.ParseCourses(
+                            rows, platoon, linkedCells);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        records = SheetParsers.ParseCourseRosterTab(
+                            rows, tab, linkedCells);
+                        courses = CourseNamesFrom(records);
+                    }
+                }
+                else
+                {
+                    records = SheetParsers.ParseCourseRosterTab(rows, tab, linkedCells);
+                    courses = CourseNamesFrom(records);
+                }
+
+                if (records.Count > 0 && courses.Count > 0)
+                    _tabData[tab] = (records, courses);
+            }
+
+            var previousTab = SelectedTab ?? "";
+            _suppressTabSelection = true;
+            Tabs.Clear();
+            foreach (var tab in _tabData.Keys) Tabs.Add(tab);
+            SelectedTab = previousTab.Length > 0 && _tabData.ContainsKey(previousTab)
+                ? previousTab
+                : Tabs.FirstOrDefault() ?? "";
+            _suppressTabSelection = false;
+            ShowSelectedTab();
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    partial void OnSelectedTabChanged(string value)
+    {
+        if (!_suppressTabSelection) ShowSelectedTab();
+    }
+
+    partial void OnSelectedFilterChanged(string value) => ApplyFilter();
+
+    private void ShowSelectedTab()
+    {
+        var selectedTab = SelectedTab ?? "";
+        if (!_tabData.TryGetValue(selectedTab, out var data))
+        {
+            _all = [];
+            Records.Clear();
+            CourseNames.Clear();
+            FilterOptions.Clear();
+            FilterOptions.Add("All courses");
+            SelectedFilter = "All courses";
+            DataLoaded?.Invoke();
+            return;
+        }
+
+        _all = data.Records;
+        CourseNames.Clear();
+        foreach (var course in data.Courses) CourseNames.Add(course);
+
+        var previousFilter = SelectedFilter ?? "All courses";
+        FilterOptions.Clear();
+        FilterOptions.Add("All courses");
+        foreach (var course in data.Courses) FilterOptions.Add($"Needs: {course}");
+        SelectedFilter = FilterOptions.Contains(previousFilter)
+            ? previousFilter
+            : "All courses";
+        ApplyFilter();
+        DataLoaded?.Invoke();
+    }
+
+    private void ApplyFilter()
+    {
+        Records.Clear();
+        IEnumerable<CourseRecord> records = _all;
+        var selectedFilter = SelectedFilter ?? "All courses";
+        if (selectedFilter.StartsWith("Needs: ", StringComparison.OrdinalIgnoreCase))
+        {
+            var course = selectedFilter["Needs: ".Length..];
+            records = records.Where(record =>
+                record.Courses.TryGetValue(course, out var status) &&
+                !status.Equals("Complete", StringComparison.OrdinalIgnoreCase) &&
+                !status.Equals("Advanced", StringComparison.OrdinalIgnoreCase));
+        }
+        foreach (var record in records) Records.Add(record);
+    }
+
+    private static List<string> CourseNamesFrom(IEnumerable<CourseRecord> records) =>
+        records.SelectMany(record => record.Courses.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 }
 
 // ===================================================================== CEFO

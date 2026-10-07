@@ -153,7 +153,12 @@
 
                     <Border Grid.Column="1" Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource H2}" Text="COMPLETED"/>
+                            <DockPanel>
+                                <TextBlock Style="{StaticResource H2}" Text="COMPLETED"/>
+                                <Button DockPanel.Dock="Right" Content="Clear completed"
+                                        Margin="8,0,0,6" Padding="9,3"
+                                        Command="{Binding ClearCompletedCommand}"/>
+                            </DockPanel>
                             <TextBlock Text="Completed one-off tasks will appear here. Recurring tasks advance to their next date."
                                        Foreground="{StaticResource TextDim}">
                                 <TextBlock.Style>

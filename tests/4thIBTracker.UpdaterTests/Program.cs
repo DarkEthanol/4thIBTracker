@@ -38,6 +38,22 @@ Check(orbatProfileLinks[ForumLoaService.NormalizeName("V. Bjørn")] ==
       orbatProfileLinks[ForumLoaService.NormalizeName("J. D'Arcy")] ==
       "https://unit.invalid/user-4000.html",
     "ORBAT profile links are retained for rank-insensitive member matching");
+var orbatCourseMembers = OrbatWebService.ParsePlatoonCourseMembersHtml("""
+    <h3>1 Platoon</h3>
+    <a href="user-100.html">2Lt. H. Example</a>
+    <h4>1 Section</h4>
+    <a href="user-101.html">Pte. V. Bjørn</a>
+    <h3>2 Platoon</h3>
+    <a href="user-200.html">Pte. O. Excluded</a>
+    """, "https://unit.invalid/orbat.php", 1);
+Check(orbatCourseMembers.Count == 2 &&
+      orbatCourseMembers.Any(member => member.Name == "H. Example" &&
+          member.Section == "HQ" &&
+          member.ProfileUrl == "https://unit.invalid/user-100.html") &&
+      orbatCourseMembers.Any(member => member.Name == "V. Bjørn" &&
+          member.Section == "1 Section" &&
+          member.ProfileUrl == "https://unit.invalid/user-101.html"),
+    "configured platoon ORBAT members retain section and profile link");
 
 var canonicallyEquivalent = OrbatWebService.Compare(
     new() { ["HQ"] = ["V. Éclair"] },
@@ -57,6 +73,20 @@ Check(!platoonSettings.ExcludesOutstandingCourse("SERE Advanced"),
     "outstanding-course exclusion requires an exact name");
 Check(new AppConfig.PlatoonSection().OperationDayOfWeek == DayOfWeek.Saturday,
     "operation night defaults to Saturday");
+var nullDropdownSelectionHandled = true;
+try
+{
+    var otherCoursesViewModel = new OtherCoursesViewModel(
+        new GoogleSheetsService(new AppConfig()), new AppConfig());
+    otherCoursesViewModel.SelectedFilter = null!;
+    otherCoursesViewModel.SelectedTab = null!;
+}
+catch (NullReferenceException)
+{
+    nullDropdownSelectionHandled = false;
+}
+Check(nullDropdownSelectionHandled,
+    "other-course dropdowns tolerate WPF's transient null selection");
 
 var legacyWebsiteSettings = JsonNode.Parse("""
     {
@@ -878,6 +908,37 @@ Check(missingAdvancedMedical.Count == 1 &&
           "No matching Advanced Medical Course badge" &&
       doctorSatisfiesAdvanced.Count == 0,
     "advanced CTM tracker values require Advanced Medical or a superseding Doctor badge");
+var membershipDiscrepancies =
+    PromotionalCourseService.FindOrbatMembershipDiscrepancies(
+        [
+            new CourseRecord
+            {
+                Name = "Pte. V. Shared",
+                Section = "1-1",
+                ProfileUrl = "https://unit.invalid/user-300.html",
+            },
+            new CourseRecord
+            {
+                Name = "Pte. T. Tracker",
+                Section = "1-2",
+                ProfileUrl = "https://unit.invalid/user-301.html",
+            },
+        ],
+        [
+            new OrbatCourseMember(
+                "V. Shared", "1 Section", "https://unit.invalid/user-300.html"),
+            new OrbatCourseMember(
+                "O. Orbat", "2 Section", "https://unit.invalid/user-302.html"),
+        ]);
+Check(membershipDiscrepancies.Count == 2 &&
+      membershipDiscrepancies.Any(item => item.Name == "Pte. T. Tracker" &&
+          item.TrackerStatus == "On course tracker" &&
+          item.WebsiteStatus == "Not found on website ORBAT") &&
+      membershipDiscrepancies.Any(item => item.Name == "O. Orbat" &&
+          item.TrackerStatus == "Not found on course tracker" &&
+          item.WebsiteStatus == "On website ORBAT" &&
+          item.ProfileUrl == "https://unit.invalid/user-302.html"),
+    "course discrepancies report tracker-only and ORBAT-only members");
 var unknownPrerequisiteCourse = joinedInitialCourse with
 {
     Prerequisites = ["Minimum rank of LCpl"],

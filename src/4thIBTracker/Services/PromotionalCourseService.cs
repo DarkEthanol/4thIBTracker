@@ -89,6 +89,7 @@ public record CourseTrackerDiscrepancy(
     string ProfileUrl)
 {
     public string Detail => $"Tracker: {TrackerStatus} · Website: {WebsiteStatus}";
+    public bool HasProfileUrl => !string.IsNullOrWhiteSpace(ProfileUrl);
 }
 
 /// <summary>
@@ -570,6 +571,51 @@ public static class PromotionalCourseService
                 profileUrl));
         }
         return discrepancies;
+    }
+
+    public static IReadOnlyList<CourseTrackerDiscrepancy>
+        FindOrbatMembershipDiscrepancies(
+            IEnumerable<CourseRecord> trackerRecords,
+            IEnumerable<OrbatCourseMember> orbatMembers)
+    {
+        var tracker = trackerRecords
+            .GroupBy(record => ForumLoaService.NormalizeName(record.Name),
+                StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Key.Length > 0)
+            .ToDictionary(group => group.Key, group => group.First(),
+                StringComparer.OrdinalIgnoreCase);
+        var website = orbatMembers
+            .GroupBy(member => ForumLoaService.NormalizeName(member.Name),
+                StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Key.Length > 0)
+            .ToDictionary(group => group.Key, group => group.First(),
+                StringComparer.OrdinalIgnoreCase);
+        var discrepancies = new List<CourseTrackerDiscrepancy>();
+
+        foreach (var (key, record) in tracker)
+            if (!website.ContainsKey(key))
+                discrepancies.Add(new CourseTrackerDiscrepancy(
+                    record.Name,
+                    record.Section,
+                    "ORBAT membership",
+                    "On course tracker",
+                    "Not found on website ORBAT",
+                    record.ProfileUrl));
+
+        foreach (var (key, member) in website)
+            if (!tracker.ContainsKey(key))
+                discrepancies.Add(new CourseTrackerDiscrepancy(
+                    member.Name,
+                    member.Section,
+                    "ORBAT membership",
+                    "Not found on course tracker",
+                    "On website ORBAT",
+                    member.ProfileUrl));
+
+        return discrepancies
+            .OrderBy(item => item.Section, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public static bool CanMatchProfileCourse(string prerequisite)

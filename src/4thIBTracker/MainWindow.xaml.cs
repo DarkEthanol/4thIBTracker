@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private AttendanceView? _attendance;
     private LoaView? _loas;
     private CoursesView? _courses;
+    private OtherCoursesView? _otherCourses;
     private CampaignMedalsView? _campaignMedals;
     private CefoView? _cefo;
     private FillInsView? _fillIns;
@@ -240,6 +241,11 @@ public partial class MainWindow : Window
         ShowPage(_courses ??= new CoursesView(new CoursesViewModel(_sheets, _config)),
             CoursesNavButton, "Courses");
 
+    private void NavOtherCourses_Click(object sender, RoutedEventArgs e) =>
+        ShowPage(_otherCourses ??= new OtherCoursesView(
+                new OtherCoursesViewModel(_sheets, _config)),
+            OtherCoursesNavButton, "Other Courses");
+
     private void NavCampaignMedals_Click(object sender, RoutedEventArgs e) =>
         ShowPage(_campaignMedals ??=
                 new CampaignMedalsView(new CampaignMedalsViewModel(_sheets, _config)),
@@ -334,6 +340,7 @@ public partial class MainWindow : Window
         _attendance = null;
         _loas = null;
         _courses = null;
+        _otherCourses = null;
         _campaignMedals = null;
         _cefo = null;
         _fillIns = null;

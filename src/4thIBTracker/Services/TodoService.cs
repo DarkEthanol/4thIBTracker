@@ -182,6 +182,13 @@ public class TodoService
         Save();
     }
 
+    public int ClearCompleted()
+    {
+        var removed = _store.Tasks.RemoveAll(task => task.IsCompleted);
+        if (removed > 0) Save();
+        return removed;
+    }
+
     private void Save()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(StorePath)!);

@@ -159,6 +159,26 @@ public partial class TodoViewModel : ObservableObject
         Refresh();
     }
 
+    private bool CanClearCompleted() => CompletedItems.Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanClearCompleted))]
+    private void ClearCompleted()
+    {
+        var count = CompletedItems.Count;
+        if (count == 0) return;
+
+        var result = MessageBox.Show(
+            $"Clear {count} completed task{(count == 1 ? "" : "s")}?\n\nThis cannot be undone.",
+            "Clear completed tasks",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        var removed = _store.ClearCompleted();
+        Refresh();
+        StatusMessage = $"Cleared {removed} completed task{(removed == 1 ? "" : "s")}.";
+    }
+
     private void RefreshAfterTaskChange(string? message)
     {
         Refresh();
@@ -189,5 +209,6 @@ public partial class TodoViewModel : ObservableObject
             CompletedItems.Add(item);
 
         OverdueCount = OpenItems.Count(item => item.IsOverdue);
+        ClearCompletedCommand.NotifyCanExecuteChanged();
     }
 }

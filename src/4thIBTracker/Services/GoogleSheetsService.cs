@@ -428,22 +428,23 @@ public class GoogleSheetsService
     }
 
     /// <summary>
-    /// Reads displayed text and hyperlinks from every workbook tab in one API
-    /// request. Use this when the caller needs the complete workbook: it avoids
-    /// a separate metadata round trip solely to discover the tab names.
+    /// Reads displayed text and hyperlinks from workbook tabs in one API
+    /// request. Hidden tabs can be excluded for user-facing selectors while
+    /// background comparisons can still request the complete workbook.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, (string Text, string? Url)[][]>>
-        ReadAllTabLinksAsync(string spreadsheetId)
+        ReadAllTabLinksAsync(string spreadsheetId, bool includeHidden = true)
     {
         var svc = await GetServiceAsync();
         var request = svc.Spreadsheets.Get(spreadsheetId);
-        request.Fields = "sheets(properties(title),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))";
+        request.Fields = "sheets(properties(title,hidden),data(rowData(values(formattedValue,hyperlink,textFormatRuns(format(link(uri)))))))";
         var response = await request.ExecuteAsync();
         var result = new Dictionary<string, (string Text, string? Url)[][]>(
             StringComparer.OrdinalIgnoreCase);
 
         foreach (var sheet in response.Sheets ?? [])
         {
+            if (!includeHidden && sheet.Properties?.Hidden == true) continue;
             var title = sheet.Properties?.Title;
             if (string.IsNullOrWhiteSpace(title)) continue;
             var rows = sheet.Data?.FirstOrDefault()?.RowData;

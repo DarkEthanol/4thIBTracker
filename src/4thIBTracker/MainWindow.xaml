@@ -148,6 +148,8 @@
                                     Content="  Operation LOAs" Click="NavLoas_Click"/>
                             <Button x:Name="CoursesNavButton" Style="{StaticResource NavButton}"
                                     Content="  Courses" Click="NavCourses_Click"/>
+                            <Button x:Name="OtherCoursesNavButton" Style="{StaticResource NavButton}"
+                                    Content="  Other Courses" Click="NavOtherCourses_Click"/>
                             <Button x:Name="ForumCoursesNavButton" Style="{StaticResource NavButton}"
                                     Content="  NCO Courses" Click="NavForumCourses_Click"/>
                             <Button x:Name="PromotionalCourseNavButton" Style="{StaticResource NavButton}"

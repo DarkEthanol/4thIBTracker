@@ -12,6 +12,11 @@ public record ProfileQualificationFetchResult(
     public bool Success => FailureReason.Length == 0;
 }
 
+public record OrbatCourseMember(
+    string Name,
+    string Section,
+    string ProfileUrl);
+
 /// <summary>
 /// Reads the configured platoon's structure from the website ORBAT and
 /// compares it against the SuT tracker's ORBAT 2.0 sheet. Membership is
@@ -46,6 +51,17 @@ public static class OrbatWebService
     {
         var html = await Http.GetStringAsync(orbatUrl);
         return ParseProfileLinksHtml(html, orbatUrl);
+    }
+
+    /// <summary>
+    /// Reads the configured platoon's website membership and retains each
+    /// member's forum profile link for course discrepancy reporting.
+    /// </summary>
+    public static async Task<IReadOnlyList<OrbatCourseMember>>
+        FetchPlatoonCourseMembersAsync(string orbatUrl, int platoon)
+    {
+        var html = await Http.GetStringAsync(orbatUrl);
+        return ParsePlatoonCourseMembersHtml(html, orbatUrl, platoon);
     }
 
     /// <summary>
@@ -143,6 +159,18 @@ public static class OrbatWebService
                 profiles[key] = profile.AbsoluteUri;
         }
         return profiles;
+    }
+
+    internal static IReadOnlyList<OrbatCourseMember> ParsePlatoonCourseMembersHtml(
+        string html, string orbatUrl, int platoon)
+    {
+        var sections = ParsePlatoonHtml(html, platoon);
+        var profileLinks = ParseProfileLinksHtml(html, orbatUrl);
+        return sections.SelectMany(section => section.Value.Select(name =>
+        {
+            profileLinks.TryGetValue(ForumLoaService.NormalizeName(name), out var profileUrl);
+            return new OrbatCourseMember(name, section.Key, profileUrl ?? "");
+        })).ToList();
     }
 
     internal static Dictionary<string, List<string>> ParsePlatoonHtml(string html, int platoon)
