@@ -180,6 +180,69 @@ public static class OrbatWebService
         return profiles;
     }
 
+    /// <summary>
+    /// Returns the current unit assignment for every member on the website
+    /// ORBAT. Rifle/FSG sections use the compact form used by fill-in reports
+    /// (for example 1-3 and 6-1); platoon headquarters and specialist units
+    /// retain a readable heading.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> ParseUnitAssignmentsHtml(string html)
+    {
+        var platoonRx = new Regex(
+            @"^(?<pl>\d+)\b.*Platoon$", RegexOptions.IgnoreCase);
+        var sectionRx = new Regex(
+            @"^(?<sec>\d+)\s+Section$", RegexOptions.IgnoreCase);
+
+        var events = new List<(int Pos, bool IsHeading, string Text)>();
+        foreach (Match match in HeadingRx.Matches(html))
+            events.Add((match.Index, true, DecodeText(match.Groups["text"].Value)));
+        foreach (Match match in UserLinkRx.Matches(html))
+            events.Add((match.Index, false, DecodeText(match.Groups["name"].Value)));
+        events.Sort((left, right) => left.Pos.CompareTo(right.Pos));
+
+        var assignments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string currentOrigin = "";
+        string? currentPlatoon = null;
+        foreach (var (_, isHeading, text) in events)
+        {
+            if (isHeading)
+            {
+                var platoon = platoonRx.Match(text);
+                if (platoon.Success)
+                {
+                    currentPlatoon = platoon.Groups["pl"].Value;
+                    currentOrigin = $"{currentPlatoon} Platoon HQ";
+                    continue;
+                }
+
+                var section = sectionRx.Match(text);
+                if (section.Success && currentPlatoon is not null)
+                {
+                    currentOrigin = $"{currentPlatoon}-{section.Groups["sec"].Value}";
+                    continue;
+                }
+
+                currentPlatoon = null;
+                currentOrigin = text switch
+                {
+                    "Battlegroup HQ" => "BGHQ",
+                    "Alma Company HQ" => "Alma Coy HQ",
+                    "Burma Company HQ" => "Burma Coy HQ",
+                    "Corunna Company HQ" => "Corunna Coy HQ",
+                    _ => text,
+                };
+                continue;
+            }
+
+            var name = NameRx.Match(text);
+            if (!name.Success || currentOrigin.Length == 0) continue;
+            assignments.TryAdd(
+                ForumLoaService.NormalizeName(name.Groups[1].Value), currentOrigin);
+        }
+
+        return assignments;
+    }
+
     internal static IReadOnlyList<OrbatCourseMember> ParsePlatoonCourseMembersHtml(
         string html, string orbatUrl, int platoon)
     {

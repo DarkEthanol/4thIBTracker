@@ -8,11 +8,12 @@ public partial class FillInsView : UserControl
 {
     private readonly FillInsViewModel _vm;
 
-    public FillInsView(FillInsViewModel vm)
+    public FillInsView(FillInsViewModel vm, PatrolFillInsViewModel patrolVm)
     {
         InitializeComponent();
         _vm = vm;
         DataContext = vm;
+        PatrolHistoryHost.Content = new PatrolFillInsView(patrolVm);
         Loaded += async (_, _) =>
         {
             if (!_vm.HasData && !_vm.IsLoading)

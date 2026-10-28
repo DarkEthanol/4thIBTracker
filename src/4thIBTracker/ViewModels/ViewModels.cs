@@ -854,7 +854,7 @@ public partial class CoursesViewModel : ObservableObject
         var profileTask = FetchProfileHtml is null
             ? OrbatWebService.FetchProfileQualificationResultsAsync(urls)
             : OrbatWebService.FetchProfileQualificationResultsAsync(
-                urls, FetchProfileHtml, maxConcurrency: 3);
+                urls, FetchProfileHtml, maxConcurrency: 8);
         Task<IReadOnlyList<OrbatCourseMember>>? orbatTask = null;
         if (!string.IsNullOrWhiteSpace(_config.OrbatUrl))
             orbatTask = OrbatWebService.FetchPlatoonCourseMembersAsync(

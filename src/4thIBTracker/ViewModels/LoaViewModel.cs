@@ -74,22 +74,41 @@ public partial class LoaViewModel : ObservableObject
             var threads = forums.SelectMany((forum, index) =>
                     ForumLoaService.ParseThreads(forumPages[index], forum.Url, forum.Name))
                 .ToList();
-            var additionalForumPages = forums.SelectMany((forum, index) =>
-                    Enumerable.Range(2, Math.Max(0,
-                            ForumCoursesService.LastPage(forumPages[index], forum.Url) - 1))
-                        .Select(page => new
-                        {
-                            Forum = forum,
-                            Url = ForumCoursesService.PageUrl(forum.Url, page),
-                        }))
-                .ToList();
-            if (additionalForumPages.Count > 0)
+
+            // MyBB occasionally advertises additional forum pages that do not
+            // exist (or redirect back to page one). Treat every page after the
+            // first as optional and stop as soon as it contributes no new
+            // personal threads. A bad pager must not break the whole LOA scan.
+            foreach (var (forum, index) in forums.Select((forum, index) => (forum, index)))
             {
-                var additionalHtml = await FetchManyAsync(
-                    additionalForumPages.Select(page => page.Url).ToList());
-                threads.AddRange(additionalForumPages.SelectMany((page, index) =>
-                    ForumLoaService.ParseThreads(
-                        additionalHtml[index], page.Forum.Url, page.Forum.Name)));
+                var seen = threads
+                    .Where(thread => thread.Section.Equals(
+                        forum.Name, StringComparison.OrdinalIgnoreCase))
+                    .Select(thread => thread.Url)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var lastPage = Math.Min(
+                    ForumCoursesService.LastPage(forumPages[index], forum.Url), 25);
+                for (var page = 2; page <= lastPage; page++)
+                {
+                    IReadOnlyList<LoaThread> pageThreads;
+                    try
+                    {
+                        var html = await FetchHtml!(
+                            ForumCoursesService.PageUrl(forum.Url, page));
+                        pageThreads = ForumLoaService.ParseThreads(
+                            html, forum.Url, forum.Name);
+                    }
+                    catch
+                    {
+                        break;
+                    }
+
+                    var additions = pageThreads
+                        .Where(thread => seen.Add(thread.Url))
+                        .ToList();
+                    if (additions.Count == 0) break;
+                    threads.AddRange(additions);
+                }
             }
 
             threads = threads
@@ -110,23 +129,43 @@ public partial class LoaViewModel : ObservableObject
             var posts = threads.SelectMany((thread, index) =>
                     ForumLoaService.ParsePosts(lastPagesTask.Result[index], thread))
                 .ToList();
-            var olderPagePlans = threads.SelectMany((thread, index) =>
-                    Enumerable.Range(1, Math.Max(0,
-                            ForumLoaService.LastThreadPage(lastPagesTask.Result[index], thread.Url) - 1))
-                        .Select(page => new
-                        {
-                            Thread = thread,
-                            Url = ForumLoaService.ThreadPageUrl(thread.Url, page),
-                        }))
-                .ToList();
-            if (olderPagePlans.Count > 0)
+            var seenPosts = posts
+                .Select(PostIdentity)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var advertisedOlderPages = threads.Select((thread, index) => Math.Max(0,
+                    ForumLoaService.LastThreadPage(
+                        lastPagesTask.Result[index], thread.Url) - 1))
+                .Sum();
+            if (advertisedOlderPages > 0)
             {
-                StatusMessage = $"Checking {olderPagePlans.Count + threads.Count} forum page(s) " +
+                StatusMessage = $"Checking up to {advertisedOlderPages + threads.Count} forum page(s) " +
                                 "for the selected operation night…";
-                var olderPages = await FetchManyAsync(
-                    olderPagePlans.Select(page => page.Url).ToList());
-                posts.AddRange(olderPagePlans.SelectMany((page, index) =>
-                    ForumLoaService.ParsePosts(olderPages[index], page.Thread)));
+                foreach (var (thread, index) in threads.Select((thread, index) => (thread, index)))
+                {
+                    var lastThreadPage = Math.Min(
+                        ForumLoaService.LastThreadPage(
+                            lastPagesTask.Result[index], thread.Url), 25);
+                    for (var page = 1; page < lastThreadPage; page++)
+                    {
+                        IReadOnlyList<LoaPost> pagePosts;
+                        try
+                        {
+                            var html = await FetchHtml!(
+                                ForumLoaService.ThreadPageUrl(thread.Url, page));
+                            pagePosts = ForumLoaService.ParsePosts(html, thread);
+                        }
+                        catch
+                        {
+                            break;
+                        }
+
+                        var additions = pagePosts
+                            .Where(post => seenPosts.Add(PostIdentity(post)))
+                            .ToList();
+                        if (additions.Count == 0) break;
+                        posts.AddRange(additions);
+                    }
+                }
             }
 
             var groups = ForumLoaService.BuildRosterStatus(
@@ -170,6 +209,9 @@ public partial class LoaViewModel : ObservableObject
         foreach (var url in urls) fallback.Add(await FetchHtml!(url));
         return fallback;
     }
+
+    private static string PostIdentity(LoaPost post) =>
+        $"{post.Url}\n{post.Date:yyyy-MM-dd}";
 
     [RelayCommand]
     private void Open(LoaMemberRow? entry)

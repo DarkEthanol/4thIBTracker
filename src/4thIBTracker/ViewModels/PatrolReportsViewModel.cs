@@ -217,10 +217,12 @@ public partial class PatrolReportsViewModel : ObservableObject
             var mine = all.Where(t => PlTitleRx.IsMatch(t.Title)).ToList();
 
             // Sign-off check: a report with zero replies can't contain the
-            // sign-off comment, so only threads with replies are opened.
+            // sign-off comment. Date-unknown reports are still opened because
+            // their DATE field may be the only usable date (including DDMMYY).
             var signedOff = new HashSet<string>();
+            var reportDates = new Dictionary<string, DateTime>();
             var phrase = _config.Platoon.SignOffPhrase;
-            var toCheck = mine.Where(t => t.Replies is null or > 0).ToList();
+            var toCheck = mine.Where(t => t.Date is null || t.Replies is null or > 0).ToList();
             var checks = toCheck.Take(40).ToList();
             var tagRx = new Regex("<[^>]+>");
             if (checks.Count > 0)
@@ -229,11 +231,20 @@ public partial class PatrolReportsViewModel : ObservableObject
                 var bodies = await FetchManyAsync(checks.Select(t => t.Url).ToList());
                 for (int i = 0; i < checks.Count; i++)
                 {
-                    var body = tagRx.Replace(bodies[i], " ");
+                    var body = System.Net.WebUtility.HtmlDecode(tagRx.Replace(bodies[i], " "));
                     if (body.Contains(phrase, StringComparison.OrdinalIgnoreCase))
                         signedOff.Add(checks[i].Url);
+                    if (checks[i].Date is null &&
+                        ForumCoursesService.ParseReportDate(body) is { } reportDate)
+                        reportDates[checks[i].Url] = reportDate;
                 }
             }
+
+            if (reportDates.Count > 0)
+                mine = mine.Select(thread =>
+                    thread.Date is null && reportDates.TryGetValue(thread.Url, out var reportDate)
+                        ? thread with { Date = reportDate }
+                        : thread).ToList();
 
             Nights.Clear();
             foreach (var night in mine

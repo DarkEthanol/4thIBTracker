@@ -54,6 +54,21 @@ Check(orbatCourseMembers.Count == 2 &&
           member.Section == "1 Section" &&
           member.ProfileUrl == "https://unit.invalid/user-101.html"),
     "configured platoon ORBAT members retain section and profile link");
+var unitAssignments = OrbatWebService.ParseUnitAssignmentsHtml("""
+    <h4>Battlegroup HQ</h4>
+    <a href="user-10.html">Maj. B. Gibson</a>
+    <h4>1 Platoon</h4>
+    <a href="user-11.html">2Lt. H. Example</a>
+    <h4>3 Section</h4>
+    <a href="user-12.html">Pte. M. Connor</a>
+    <h4>3 Medical Regiment</h4>
+    <a href="user-13.html">Cpl. C. Broad</a>
+    """);
+Check(unitAssignments[ForumLoaService.NormalizeName("B. Gibson")] == "BGHQ" &&
+      unitAssignments[ForumLoaService.NormalizeName("H. Example")] == "1 Platoon HQ" &&
+      unitAssignments[ForumLoaService.NormalizeName("M. Connor")] == "1-3" &&
+      unitAssignments[ForumLoaService.NormalizeName("C. Broad")] == "3 Medical Regiment",
+    "full website ORBAT assignments use report-friendly unit labels");
 
 var canonicallyEquivalent = OrbatWebService.Compare(
     new() { ["HQ"] = ["V. Éclair"] },
@@ -415,6 +430,160 @@ Check(trainingMonths[0].Nights.Count == 1 &&
       trainingMonths[0].Nights[0].SubmittedCount == 2 &&
       trainingMonths[0].ReportCount == 2,
     "training month keeps section submissions and excludes HQ");
+
+var compactPatrolThreads = ForumCoursesService.ParseThreads("""
+    <a href="thread-700.html">Patrol Report: 1 Platoon, 1 Section - 171026</a>
+    <span>Topic started by <a href="member.php?id=1">Cpl. One</a></span>
+    """, "https://unit.invalid/forum-571.html");
+Check(compactPatrolThreads.Count == 1 &&
+      compactPatrolThreads[0].Date == new DateTime(2026, 10, 17),
+    "patrol report titles accept compact DDMMYY dates");
+Check(ForumCoursesService.ParseReportDate("DATE: 171026") ==
+      new DateTime(2026, 10, 17),
+    "patrol report DATE fields accept compact DDMMYY dates");
+Check(ForumCoursesService.ParseReportDate("post 171399") is null,
+    "invalid compact values are not treated as patrol report dates");
+
+var compactPatrolConfig = new AppConfig
+{
+    Platoon = new AppConfig.PlatoonSection { Number = 1 },
+    Forum = new AppConfig.ForumSection
+    {
+        PatrolReportsForumId = "https://unit.invalid/forum-571.html",
+    },
+};
+var compactPatrolPage = """
+    <a href="thread-701.html">Patrol Report: 1 Platoon, 1 Section</a>
+    <span>Topic started by <a href="member.php?id=1">Cpl. One</a></span>
+    <span>0 Replies</span>
+    """;
+var compactPatrol = new PatrolReportsViewModel(compactPatrolConfig)
+{
+    FetchHtml = _ => Task.FromResult(""),
+    FetchHtmlBatch = urls => Task.FromResult<IReadOnlyList<string>>(urls.Select(url =>
+        url.EndsWith("thread-701.html", StringComparison.OrdinalIgnoreCase)
+            ? "<div class=\"post_body\">DATE:<br>171026</div>"
+            : url.EndsWith("forum-571.html", StringComparison.OrdinalIgnoreCase)
+                ? compactPatrolPage
+                : "").ToList()),
+};
+await compactPatrol.ScanAsync();
+Check(compactPatrol.Nights.Count == 1 &&
+      compactPatrol.Nights[0].Title == "Saturday, 17 October 2026",
+    "patrol report body DDMMYY date is used for operation-night grouping");
+
+var patrolRoster = PatrolFillInService.ParseRoster("""
+    <div class="post_body scaleimages">
+      ELEMENT REPORTING:<br>2 R YORKS, 1 Platoon, 3 Section<br><br>
+      A. SIZE AND COMPOSITION OF PATROL:<br>
+      Pte. P. Donny (fill- in 6-1)<br>
+      A/Cpl. C. Rhodes<br>
+      LCpl. J. Day (ARC 1)<br>
+      Pte, M. Sobczak<br><br>
+      B. TASK:<br>CLEAR OBJ CRYSTAL<br>
+      F. CONCLUSIONS:<br>Maj. B. Gibson
+    </div>
+    """);
+Check(patrolRoster.Count == 4 &&
+      patrolRoster[0].NormalizedName == "p. donny" &&
+      patrolRoster[0].Origin == "6-1" &&
+      patrolRoster[2].NormalizedName == "j. day" &&
+      patrolRoster[2].Origin == "ARC 1",
+    "patrol roster accepts explicit and origin-only fill-in annotations");
+Check(patrolRoster[3].NormalizedName == "m. sobczak" &&
+      patrolRoster.All(member => member.NormalizedName != "b. gibson"),
+    "patrol roster tolerates rank commas and stops before later report sections");
+var roleRoster = PatrolFillInService.ParseRoster("""
+    <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
+    Charlie Fireteam<br>
+    Pointman (DMR): Pte. T. Linck<br>
+    Sect. Comd: Cpl. C. Morgan<br>
+    Rifleman (NLAW): 2Lt. C. Long I<br>
+    Rifleman: Pte. W. Riley 7-2<br>
+    Delta Fireteam<br>
+    Pointman: Pte. L. Vrhovac<br>
+    Sect. 2IC: LCpl. M. Eshers<br>
+    CTM (UGL)te. B. Sansom<br>
+    GPMG: Pte.A.Hem<br>
+    B. TASK:<br>Test</div>
+    """);
+Check(roleRoster.Count == 8 &&
+      roleRoster.Any(member => member.NormalizedName == "b. sansom") &&
+      roleRoster.Any(member => member.NormalizedName == "a. hem") &&
+      roleRoster.Any(member => member.NormalizedName == "c. long") &&
+      roleRoster.Single(member => member.NormalizedName == "w. riley").Origin == "7-2",
+    "role-prefixed patrol rosters and inline origins are parsed");
+
+var patrolHistoryConfig = new AppConfig
+{
+    UnitWebsite = "https://unit.invalid",
+    Platoon = new AppConfig.PlatoonSection { Number = 1 },
+};
+var patrolHistory = new PatrolFillInsViewModel(patrolHistoryConfig);
+var patrolHistoryPages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+{
+    ["https://unit.invalid/index.php"] = """
+        <a href="forum-575.html">Operation TEST</a>
+        <a href="forum-577.html">Patrol Reports</a>
+        """,
+    ["https://unit.invalid/orbat.php"] = """
+        <h3>1 Platoon</h3>
+        <h4>1 Section</h4>
+        <a href="user-1.html">LCpl. M. Eshers</a>
+        <h4>2 Section</h4>
+        <a href="user-2.html">Cpl. H. Bem</a>
+        <h4>3 Section</h4>
+        <a href="user-3.html">LCpl. M. Connor</a>
+        <a href="user-4.html">Pte. G. Weyer</a>
+        <h3>2 Platoon</h3>
+        """,
+    ["https://unit.invalid/forum-577.html"] = """
+        <a href="thread-801.html">Operation TEST: 2 R YORKS, 1 Platoon, 1 Section - 17/10/2026</a>
+        <span>Topic started by <a href="member.php?id=1">LCpl. M. Eshers</a></span><span>0 Replies</span>
+        <a href="thread-802.html">Operation TEST: 2 R YORKS, 1 Platoon, 2 Section - 17/10/2026</a>
+        <span>Topic started by <a href="member.php?id=2">Cpl. H. Bem</a></span><span>0 Replies</span>
+        <a href="thread-803.html">Operation TEST: 2 R YORKS, 1 Platoon, 3 Section - 17/10/2026</a>
+        <span>Topic started by <a href="member.php?id=3">LCpl. M. Connor</a></span><span>0 Replies</span>
+        """,
+    ["https://unit.invalid/thread-801.html"] = """
+        <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
+        LCpl. M. Eshers<br>Pte. J. Butterworth (4-2)<br>
+        Cpl. C. Broad<br>B. TASK:<br>Test</div>
+        """,
+    ["https://unit.invalid/thread-802.html"] = """
+        <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
+        Cpl. H. Bem<br>Pte. H. Rayna<br>
+        Pte. M. Hazard (6-1)<br>B. TASK:<br>Test</div>
+        """,
+    ["https://unit.invalid/thread-803.html"] = """
+        <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
+        LCpl. M. Conner<br>Pte. G. Weyner<br>B. TASK:<br>Test</div>
+        """,
+};
+patrolHistory.FetchHtml = url => Task.FromResult(
+    patrolHistoryPages.GetValueOrDefault(url, ""));
+patrolHistory.FetchHtmlBatch = urls => Task.FromResult<IReadOnlyList<string>>(
+    urls.Select(url => patrolHistoryPages.GetValueOrDefault(url, "")).ToList());
+patrolHistory.LoadSutRows = () => Task.FromResult<IList<IList<object>>>(
+    new List<IList<object>>
+    {
+        new List<object> { "1 Pl, 2 Section" },
+        new List<object> { "", "Pte. H. Rayna" },
+        new List<object>(),
+        new List<object> { "3 MED" },
+        new List<object> { "", "Cpl. C. Broad" },
+    });
+patrolHistory.SelectedMonth = patrolHistory.MonthOptions.First(option =>
+    option.Month == new DateTime(2026, 10, 1));
+await patrolHistory.ScanAsync();
+Check(patrolHistory.Nights.Count == 1 &&
+      patrolHistory.Nights[0].People.Select(person =>
+          ForumLoaService.NormalizeName(person.Name))
+          .OrderBy(name => name)
+          .SequenceEqual(new[] { "c. broad", "j. butterworth", "m. hazard" }) &&
+      patrolHistory.Nights[0].People.Single(person =>
+          ForumLoaService.NormalizeName(person.Name) == "c. broad").Origin == "3 MED",
+    "monthly patrol history merges website and SuT regulars and resolves missing origins");
 
 var platoonForum = """
     <a href="forum-24.html">1 Platoon, HQ</a>

@@ -256,7 +256,9 @@ public partial class MainWindow : Window
             CefoNavButton, "CEFO");
 
     private void NavFillIns_Click(object sender, RoutedEventArgs e) =>
-        ShowPage(_fillIns ??= new FillInsView(new FillInsViewModel(_sheets, _config)),
+        ShowPage(_fillIns ??= new FillInsView(
+                new FillInsViewModel(_sheets, _config),
+                new PatrolFillInsViewModel(_sheets, _config)),
             FillInsNavButton, "Fill-ins");
 
     private void NavLinks_Click(object sender, RoutedEventArgs e) =>

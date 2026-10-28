@@ -50,6 +50,14 @@ public static class ForumCoursesService
     // Dates like 15.07.2026, 11/07/2026, 10/07/26, 30-06-2026
     private static readonly Regex DateRx = new(
         @"(?<d>\d{1,2})[./-](?<m>\d{1,2})[./-](?<y>\d{2,4})");
+    // Compact report dates occasionally appear as DDMMYY (for example 171026).
+    // Keep this separate from DateRx so raw forum IDs are not mistaken for dates.
+    private static readonly Regex CompactDateRx = new(
+        @"(?<!\d)(?<d>0[1-9]|[12]\d|3[01])(?<m>0[1-9]|1[0-2])(?<y>\d{2})(?!\d)");
+    private static readonly Regex LabelledReportDateRx = new(
+        @"\bdate(?:\s*\(s\)\s*of\s*(?:loa|report))?\s*:\s*(?<value>" +
+        @"(?:\d{1,2}[./-]\d{1,2}[./-]\d{2,4})|(?:\d{6}))\b",
+        RegexOptions.IgnoreCase);
     private static readonly Regex RepliesRx = new(
         @"(?<n>\d[\d,]*)\s*Repl(y|ies)", RegexOptions.IgnoreCase);
     private static readonly Regex TagRx = new(@"<[^>]+>");
@@ -97,7 +105,8 @@ public static class ForumCoursesService
 
             // The course date lives in the thread title; fall back to any
             // date in the row (last-post date) only if the title has none.
-            var date = ParseDate(title) ?? ParseDate(segment);
+            var date = ParseDate(title, allowCompact: true) ??
+                       ParseDate(segment, allowCompact: false);
 
             int? replies = null;
             var stripped = TagRx.Replace(segment, " ");
@@ -110,16 +119,31 @@ public static class ForumCoursesService
         return results;
     }
 
-    private static DateTime? ParseDate(string text)
+    /// <summary>
+    /// Reads a date from a report title or from a labelled DATE field in its
+    /// body. Compact DDMMYY values are deliberately accepted only in these
+    /// contexts so six-digit thread/post IDs cannot become report dates.
+    /// </summary>
+    public static DateTime? ParseReportDate(string text)
+    {
+        var labelled = LabelledReportDateRx.Match(text);
+        return labelled.Success
+            ? ParseDate(labelled.Groups["value"].Value, allowCompact: true)
+            : null;
+    }
+
+    private static DateTime? ParseDate(string text, bool allowCompact)
     {
         var m = DateRx.Match(text);
+        if (!m.Success && allowCompact) m = CompactDateRx.Match(text);
         if (!m.Success) return null;
         int d = int.Parse(m.Groups["d"].Value);
         int mo = int.Parse(m.Groups["m"].Value);
         int y = int.Parse(m.Groups["y"].Value);
         if (y < 100) y += 2000;
         if (mo is < 1 or > 12 || d is < 1 or > 31 || y is < 2015 or > 2100) return null;
-        return new DateTime(y, mo, Math.Min(d, DateTime.DaysInMonth(y, mo)));
+        if (d > DateTime.DaysInMonth(y, mo)) return null;
+        return new DateTime(y, mo, d);
     }
 
     /// <summary>True when the page looks like a guest-login wall rather than a thread list.</summary>
