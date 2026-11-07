@@ -28,6 +28,9 @@ Check(unicodeOrbat["1 Section"].Contains("V. Bjørn"),
     "Unicode ORBAT surname parsing");
 Check(unicodeOrbat["1 Section"].Contains("J. D'Arcy"),
     "ORBAT HTML entity decoding");
+Check(ForumLoaService.NormalizeName("Pte. V. Bjørn") == "v. bjorn" &&
+      ForumLoaService.ThreadTitleMatchesName("V. Bjorn - LOA", "V. Bjørn"),
+    "LOA names match crossed-o and ASCII forum spellings");
 var orbatProfileLinks = OrbatWebService.ParseProfileLinksHtml("""
     <h3>1 Platoon</h3>
     <a href="user-3891.html"><span>Pte. V. Bjørn</span></a>
@@ -520,6 +523,9 @@ var patrolHistoryConfig = new AppConfig
     Platoon = new AppConfig.PlatoonSection { Number = 1 },
 };
 var patrolHistory = new PatrolFillInsViewModel(patrolHistoryConfig);
+// Settings are applied without an application restart. The existing page must
+// use the newly configured specialist platoon when it is scanned again.
+patrolHistoryConfig.Platoon.Number = 3;
 var patrolHistoryPages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 {
     ["https://unit.invalid/index.php"] = """
@@ -527,7 +533,7 @@ var patrolHistoryPages = new Dictionary<string, string>(StringComparer.OrdinalIg
         <a href="forum-577.html">Patrol Reports</a>
         """,
     ["https://unit.invalid/orbat.php"] = """
-        <h3>1 Platoon</h3>
+        <h3>3 (Fire Support) Platoon</h3>
         <h4>1 Section</h4>
         <a href="user-1.html">LCpl. M. Eshers</a>
         <h4>2 Section</h4>
@@ -535,15 +541,21 @@ var patrolHistoryPages = new Dictionary<string, string>(StringComparer.OrdinalIg
         <h4>3 Section</h4>
         <a href="user-3.html">LCpl. M. Connor</a>
         <a href="user-4.html">Pte. G. Weyer</a>
-        <h3>2 Platoon</h3>
+        <h3>4 Platoon</h3>
         """,
     ["https://unit.invalid/forum-577.html"] = """
-        <a href="thread-801.html">Operation TEST: 2 R YORKS, 1 Platoon, 1 Section - 17/10/2026</a>
+        <a href="thread-800.html">Operation TEST: 2 R YORKS, 1 Platoon, 1 Section - 17/10/2026</a>
+        <span>Topic started by <a href="member.php?id=9">Cpl. O. Excluded</a></span><span>0 Replies</span>
+        <a href="thread-801.html">Operation TEST: 2 R YORKS, 3 (Fire Support) Platoon, 1 Section - 17/10/2026</a>
         <span>Topic started by <a href="member.php?id=1">LCpl. M. Eshers</a></span><span>0 Replies</span>
-        <a href="thread-802.html">Operation TEST: 2 R YORKS, 1 Platoon, 2 Section - 17/10/2026</a>
+        <a href="thread-802.html">Operation TEST: 2 R YORKS, 3 (Fire Support) Platoon, 2 Section - 17/10/2026</a>
         <span>Topic started by <a href="member.php?id=2">Cpl. H. Bem</a></span><span>0 Replies</span>
-        <a href="thread-803.html">Operation TEST: 2 R YORKS, 1 Platoon, 3 Section - 17/10/2026</a>
+        <a href="thread-803.html">Operation TEST: 2 R YORKS, 3 (Fire Support) Platoon, 3 Section - 17/10/2026</a>
         <span>Topic started by <a href="member.php?id=3">LCpl. M. Connor</a></span><span>0 Replies</span>
+        """,
+    ["https://unit.invalid/thread-800.html"] = """
+        <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
+        Pte. O. Excluded<br>B. TASK:<br>Test</div>
         """,
     ["https://unit.invalid/thread-801.html"] = """
         <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
@@ -567,7 +579,7 @@ patrolHistory.FetchHtmlBatch = urls => Task.FromResult<IReadOnlyList<string>>(
 patrolHistory.LoadSutRows = () => Task.FromResult<IList<IList<object>>>(
     new List<IList<object>>
     {
-        new List<object> { "1 Pl, 2 Section" },
+        new List<object> { "3 Pl, 2 Section" },
         new List<object> { "", "Pte. H. Rayna" },
         new List<object>(),
         new List<object> { "3 MED" },
@@ -583,7 +595,7 @@ Check(patrolHistory.Nights.Count == 1 &&
           .SequenceEqual(new[] { "c. broad", "j. butterworth", "m. hazard" }) &&
       patrolHistory.Nights[0].People.Single(person =>
           ForumLoaService.NormalizeName(person.Name) == "c. broad").Origin == "3 MED",
-    "monthly patrol history merges website and SuT regulars and resolves missing origins");
+    "monthly patrol history follows changed specialist-platoon settings and resolves origins");
 
 var platoonForum = """
     <a href="forum-24.html">1 Platoon, HQ</a>

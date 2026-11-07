@@ -49,8 +49,9 @@ public partial class PatrolFillInsViewModel : ObservableObject
 
     private readonly AppConfig _config;
     private readonly GoogleSheetsService? _sheets;
-    private readonly Regex _platoonTitleRx;
-    private readonly Regex _subunitRx;
+    private Regex _platoonTitleRx = null!;
+    private Regex _subunitRx = null!;
+    private int _matcherPlatoonNumber;
     private bool _hasScanned;
 
     public Func<string, Task<string>>? FetchHtml { get; set; }
@@ -78,12 +79,7 @@ public partial class PatrolFillInsViewModel : ObservableObject
     {
         _sheets = sheets;
         _config = config;
-        var platoon = config.Platoon.Number;
-        var platoonName = $@"\b{platoon}\s*(?:Platoon|Plt|Pl)\b";
-        _platoonTitleRx = new Regex(platoonName, RegexOptions.IgnoreCase);
-        _subunitRx = new Regex(
-            platoonName + @"\s*(?:,|-)?\s*(?:(?<hq>HQ)\b|(?<n>[123])\s*(?:Section|Sec)\b)",
-            RegexOptions.IgnoreCase);
+        RefreshPlatoonMatchers();
 
         var currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         for (var offset = 0; offset < 24; offset++)
@@ -110,6 +106,10 @@ public partial class PatrolFillInsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasData));
         try
         {
+            // Settings can be changed without restarting the application. Do
+            // not retain the platoon identity that happened to be configured
+            // when this page was first constructed.
+            RefreshPlatoonMatchers();
             var monthStart = SelectedMonth.Month;
             var monthEnd = monthStart.AddMonths(1).AddTicks(-1);
             StatusMessage = $"Finding patrol reports for {monthStart:MMMM yyyy}…";
@@ -472,6 +472,23 @@ public partial class PatrolFillInsViewModel : ObservableObject
         if (!match.Success) return null;
         if (match.Groups["hq"].Success) return "HQ";
         return match.Groups["n"].Success ? $"{match.Groups["n"].Value} Section" : null;
+    }
+
+    private void RefreshPlatoonMatchers()
+    {
+        var platoon = _config.Platoon.Number;
+        if (_matcherPlatoonNumber == platoon && _platoonTitleRx is not null) return;
+
+        _matcherPlatoonNumber = platoon;
+        // Fire-support and other specialist platoons may include a qualifier
+        // between their number and the word Platoon.
+        var platoonName =
+            $@"\b{platoon}\s*(?:\([^)]*\)\s*)?(?:Platoon|Plt|Pl)\b";
+        _platoonTitleRx = new Regex(platoonName, RegexOptions.IgnoreCase);
+        _subunitRx = new Regex(
+            platoonName +
+            @"\s*(?:,|-)?\s*(?:(?<hq>HQ)\b|(?<n>\d+)\s*(?:Section|Sec)\b)",
+            RegexOptions.IgnoreCase);
     }
 
     [RelayCommand]

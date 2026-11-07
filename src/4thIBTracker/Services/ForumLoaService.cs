@@ -249,7 +249,7 @@ public static partial class ForumLoaService
 
     public static string NormalizeName(string value)
     {
-        var decoded = WebUtility.HtmlDecode(value).Normalize(NormalizationForm.FormC);
+        var decoded = FoldNameCharacters(WebUtility.HtmlDecode(value));
         decoded = decoded.Replace('’', '\'');
         // Forum forms are completed by hand, so initials are sometimes joined
         // to the surname ("A.Mandrake") or even to the rank
@@ -258,6 +258,36 @@ public static partial class ForumLoaService
         decoded = Regex.Replace(decoded, @"(?<=\p{L}\.)\s*(?=\p{L})", " ");
         decoded = RankPrefixRx.Replace(decoded.Trim(), "");
         return Regex.Replace(decoded, @"\s+", " ").Trim().ToLowerInvariant();
+    }
+
+    private static string FoldNameCharacters(string value)
+    {
+        var decomposed = value.Normalize(NormalizationForm.FormD);
+        var folded = new StringBuilder(decomposed.Length);
+        foreach (var character in decomposed)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(character);
+            if (category is UnicodeCategory.NonSpacingMark or
+                UnicodeCategory.SpacingCombiningMark or
+                UnicodeCategory.EnclosingMark)
+                continue;
+
+            // Some Latin letters are distinct code points rather than a base
+            // letter plus combining mark. Fold the common name variants that
+            // forum users type with ordinary ASCII characters.
+            switch (character)
+            {
+                case 'ø': case 'Ø': folded.Append('o'); break;
+                case 'ł': case 'Ł': folded.Append('l'); break;
+                case 'ð': case 'Ð': folded.Append('d'); break;
+                case 'þ': case 'Þ': folded.Append("th"); break;
+                case 'æ': case 'Æ': folded.Append("ae"); break;
+                case 'œ': case 'Œ': folded.Append("oe"); break;
+                case 'ß': folded.Append("ss"); break;
+                default: folded.Append(character); break;
+            }
+        }
+        return folded.ToString().Normalize(NormalizationForm.FormC);
     }
 
     /// <summary>
