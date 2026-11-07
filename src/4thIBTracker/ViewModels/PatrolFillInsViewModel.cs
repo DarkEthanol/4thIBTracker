@@ -192,21 +192,15 @@ public partial class PatrolFillInsViewModel : ObservableObject
                     var regulars = sectionMembers.GetValueOrDefault(section, []);
                     foreach (var member in roster)
                     {
-                        // An explicit report annotation is historical evidence
-                        // and wins even if that person has since joined the section.
-                        if (member.Origin.Length == 0 &&
-                            FindMatchingName(member.NormalizedName, regulars) is not null)
+                        if (FindMatchingName(member.NormalizedName, regulars) is not null)
                             continue;
 
-                        var origin = member.Origin;
+                        var origin = "";
+                        var websiteKey = FindMatchingName(
+                            member.NormalizedName, websiteOrigins.Keys);
+                        if (websiteKey is not null)
+                            origin = websiteOrigins[websiteKey];
                         if (origin.Length == 0)
-                        {
-                            var websiteKey = FindMatchingName(
-                                member.NormalizedName, websiteOrigins.Keys);
-                            if (websiteKey is not null)
-                                origin = websiteOrigins[websiteKey];
-                        }
-                        if (string.IsNullOrWhiteSpace(origin))
                         {
                             var sheetKey = FindMatchingName(
                                 member.NormalizedName, sheetOrigins.Keys);
@@ -215,7 +209,7 @@ public partial class PatrolFillInsViewModel : ObservableObject
                         }
 
                         fillIns.Add((report.Date!.Value.Date, new PatrolFillInPerson(
-                            member.Name, origin ?? "", section, report.Url)));
+                            member.Name, origin, section, report.Url)));
                     }
                 }
             }

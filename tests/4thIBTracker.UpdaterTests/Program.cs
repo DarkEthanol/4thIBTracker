@@ -489,10 +489,9 @@ var patrolRoster = PatrolFillInService.ParseRoster("""
     """);
 Check(patrolRoster.Count == 4 &&
       patrolRoster[0].NormalizedName == "p. donny" &&
-      patrolRoster[0].Origin == "6-1" &&
       patrolRoster[2].NormalizedName == "j. day" &&
-      patrolRoster[2].Origin == "ARC 1",
-    "patrol roster accepts explicit and origin-only fill-in annotations");
+      patrolRoster.All(member => member.Origin == ""),
+    "patrol roster extracts names and discards all trailing annotations");
 Check(patrolRoster[3].NormalizedName == "m. sobczak" &&
       patrolRoster.All(member => member.NormalizedName != "b. gibson"),
     "patrol roster tolerates rank commas and stops before later report sections");
@@ -514,8 +513,21 @@ Check(roleRoster.Count == 8 &&
       roleRoster.Any(member => member.NormalizedName == "b. sansom") &&
       roleRoster.Any(member => member.NormalizedName == "a. hem") &&
       roleRoster.Any(member => member.NormalizedName == "c. long") &&
-      roleRoster.Single(member => member.NormalizedName == "w. riley").Origin == "7-2",
-    "role-prefixed patrol rosters and inline origins are parsed");
+      roleRoster.All(member => member.Origin == ""),
+    "role-prefixed patrol rosters are parsed without retaining suffix text");
+var annotatedRoster = PatrolFillInService.ParseRoster("""
+    <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
+    Pte. H. Morris (Marksman/Acting Pointman)<br>
+    A/Cpl. R. Sharpe (IC)<br>
+    Pte. E. Balsa (CTM)<br>
+    Pte. P. Donny (Attached from 6-1)<br>
+    Col. J. Dale (Attached from BGHQ)<br>
+    LCpl. J. Lewis (3 Medical Regiment)<br>
+    B. TASK:<br>Test</div>
+    """);
+Check(annotatedRoster.Count == 6 &&
+      annotatedRoster.All(member => member.Origin == ""),
+    "roles and attached-from annotations are completely discarded");
 
 var patrolHistoryConfig = new AppConfig
 {
@@ -569,7 +581,8 @@ var patrolHistoryPages = new Dictionary<string, string>(StringComparer.OrdinalIg
         """,
     ["https://unit.invalid/thread-803.html"] = """
         <div class="post_body">A. SIZE AND COMPOSITION OF PATROL:<br>
-        LCpl. M. Conner<br>Pte. G. Weyner<br>B. TASK:<br>Test</div>
+        LCpl. M. Conner (Attached from 9-1)<br>
+        Pte. G. Weyner (Rifleman/Gunner)<br>B. TASK:<br>Test</div>
         """,
 };
 patrolHistory.FetchHtml = url => Task.FromResult(

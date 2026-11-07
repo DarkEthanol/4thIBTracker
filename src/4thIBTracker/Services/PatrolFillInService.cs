@@ -22,14 +22,9 @@ public static class PatrolFillInService
         @"\bA\s*[.:]\s*SIZE\s+(?:AND|&amp;|&)\s+COMPOSITION\s+OF\s+PATROL\s*:?\s*" +
         @"(?<roster>.*?)(?=\r?\n\s*B\s*[.:]\s*TASK\b)",
         RegexOptions.IgnoreCase | RegexOptions.Singleline);
-    private static readonly Regex TrailingOriginRx = new(
-        @"\s*\((?<origin>[^()]*)\)\s*$", RegexOptions.IgnoreCase);
     private static readonly Regex EmbeddedMemberRx = new(
         @"(?<rank>(?:A/)?(?:LCpl|Cpl|Pte|CSgt|Sgt|WO[12]|2Lt|Lt\s+Col|Lt|Capt|Maj|Col|Brig|Flt\s+Lt|FS|Rct))" +
         @"[.,]*\s*(?<name>(?:[\p{L}]\.\s*)+[\p{L}\p{M}'’\-]+(?:\s+[\p{L}\p{M}'’\-]+)*)",
-        RegexOptions.IgnoreCase);
-    private static readonly Regex InlineOriginRx = new(
-        @"^[\s|I:\-–—]*(?<origin>(?:\d+\s*[-/]\s*(?:\d+|HQ)|\d+\s*(?:Plt|Platoon)\s*HQ|BGHQ|ARC\s*[- ]?\s*1|ELOA|[ABC]\s*Coy\s*HQ))[\s|I.,]*$",
         RegexOptions.IgnoreCase);
     private static readonly Regex TagRx = new(@"<[^>]+>", RegexOptions.Singleline);
 
@@ -47,15 +42,6 @@ public static class PatrolFillInService
         {
             var line = Regex.Replace(rawLine.Trim(), @"^[\-–—•*]+\s*", "");
             if (line.Length == 0) continue;
-
-            var origin = "";
-            var originMatch = TrailingOriginRx.Match(line);
-            if (originMatch.Success)
-            {
-                origin = Regex.Replace(originMatch.Groups["origin"].Value.Trim(),
-                    @"^fill\s*-?\s*in\s*", "", RegexOptions.IgnoreCase).Trim();
-                line = line[..originMatch.Index].Trim();
-            }
 
             // Hand-entered reports occasionally use "Pte," instead of "Pte.".
             line = Regex.Replace(line, @"^(?<rank>[\p{L}0-9/() ]{2,12}),\s+",
@@ -78,16 +64,9 @@ public static class PatrolFillInService
             var normalized = ForumLoaService.NormalizeName(displayName);
             if (normalized.Length == 0 || !seen.Add(normalized)) continue;
 
-            if (origin.Length == 0)
-            {
-                var remainder = line[(memberMatch.Index + memberMatch.Length)..];
-                var inlineOrigin = InlineOriginRx.Match(remainder);
-                if (inlineOrigin.Success)
-                    origin = Regex.Replace(inlineOrigin.Groups["origin"].Value,
-                        @"\s*[-/]\s*", "-").Trim();
-            }
-
-            result.Add(new PatrolRosterMember(displayName, normalized, origin));
+            // Deliberately discard every role/unit annotation after the name.
+            // Fill-in status is determined exclusively by section membership.
+            result.Add(new PatrolRosterMember(displayName, normalized, ""));
         }
         return result;
     }
